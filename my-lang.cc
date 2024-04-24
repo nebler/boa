@@ -162,3 +162,104 @@ public:
                 std::unique_ptr<ExprAST> Body)
         : Proto(std::move(Proto)), Body(std::move(Body)) {}
 };
+
+static int CurTok;
+
+static int getNextToken()
+{
+    return CurTok = gettok();
+};
+
+std::unique_ptr<ExprAST> LogError(const char *Str)
+{
+    fprintf(stderr, "LogError: %s\n", Str);
+    return nullptr;
+};
+
+std::unique_ptr<PrototypeAST> LogErrorP(const char *Str)
+{
+    LogError(Str);
+    return nullptr;
+};
+
+// Parse every expression
+static std::unique_ptr<ExprAST> ParseNumberExpr()
+{
+    auto Result = std::make_unique<NumberExprAst>(NumVal);
+    getNextToken(); // consume the number
+    return std::move(Result);
+}
+
+static std::unique_ptr<ExprAST> ParseParenExpr()
+{
+    getNextToken(); // eat '('
+    auto V = ParseExpression();
+
+    if (!V)
+    {
+        return nullptr;
+    }
+
+    if (CurTok != ')')
+    {
+        return LogError("expected ')'");
+    }
+    getNextToken();
+    return V;
+}
+
+static std::unique_ptr<ExprAST> ParseIdentifierOrCallExpr()
+{
+    std::string IdName = IdentifierStr;
+
+    if (CurTok != '(')
+    {
+        return std::make_unique<VariableExprAST>(IdName);
+    }
+    getNextToken(); // eatIdentifier
+    std::vector<std::unique_ptr<ExprAST>> Args;
+
+    if (CurTok != ')')
+    {
+        while (true)
+        {
+            if (auto Arg = ParseExpression())
+            {
+                Args.push_back(std::move(Arg));
+            }
+            else
+            {
+                return nullptr;
+            }
+
+            if (CurTok == ')')
+            {
+                break;
+            }
+
+            if (CurTok != ',')
+            {
+                return LogError("Expected ')' or ',' in argument List");
+            }
+            getNextToken();
+        }
+    }
+    getNextToken();
+    return std::make_unique<CallExprAST>(IdName, std::move(Args));
+};
+
+static std::unique_ptr<ExprAST> ParsePrimary()
+{
+    switch (CurTok)
+    {
+
+    default:
+        return LogError("unknown token when expecting an expression");
+    case tok_identifier:
+        return ParseIdentifierOrCallExpr();
+    case tok_number:
+        return ParseNumberExpr();
+    case '(':
+        return ParseParenExpr();
+    }
+}
