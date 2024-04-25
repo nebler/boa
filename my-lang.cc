@@ -1,5 +1,6 @@
 #include <string>
 #include <iostream>
+#include <map>
 using namespace std;
 
 enum Token
@@ -261,5 +262,78 @@ static std::unique_ptr<ExprAST> ParsePrimary()
         return ParseNumberExpr();
     case '(':
         return ParseParenExpr();
+    }
+}
+
+/// BinopPrecedence - This holds the precedence for each binary operator that is
+/// defined.
+static std::map<char, int> BinopPrecedence;
+
+/// GetTokPrecedence - Get the precedence of the pending binary operator token.
+static int GetTokPrecedence()
+{
+    if (!isascii(CurTok))
+        return -1;
+    switch (CurTok)
+    {
+    case '<':
+    case '>':
+        return 10;
+    case '+':
+    case '-':
+        return 20;
+    case '*':
+    case '/':
+        return 40;
+    default:
+        return 1;
+    }
+    // Make sure it's a declared binop.
+    int TokPrec = BinopPrecedence[CurTok];
+    if (TokPrec <= 0)
+        return -1;
+    return TokPrec;
+};
+
+/// expression
+///   ::= primary binoprhs
+///
+static std::unique_ptr<ExprAST> ParseExpression()
+{
+    auto LHS = ParsePrimary();
+    if (!LHS)
+        return nullptr;
+
+    return ParseBinOpRHS(0, std::move(LHS));
+}
+static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
+                                              std::unique_ptr<ExprAST> LHS)
+{
+    while (true)
+    {
+        // get token
+        int TokPrec = GetTokPrecedence();
+        if (TokPrec < ExprPrec)
+        {
+            return LHS;
+        }
+
+        int BinOp = CurTok;
+        getNextToken();
+        auto RHS = ParsePrimary();
+        if (!RHS)
+        {
+            return nullptr;
+        }
+        int NextPrec = GetTokPrecedence();
+        if (TokPrec < NextPrec)
+        {
+            RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
+            if (!RHS)
+                return nullptr;
+        }
+        // Merge LHS/RHS.
+        LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS),
+                                              std::move(RHS));
     }
 }
