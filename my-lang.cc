@@ -144,6 +144,7 @@ public:
     const std::string &getName() const { return Name; }
 };
 
+/// FunctionAST - This class represents a function definition itself.
 class FunctionAST
 {
     std::unique_ptr<PrototypeAST> Proto;
@@ -181,6 +182,7 @@ static std::unique_ptr<ExprAST> ParseNumberExpr()
     getNextToken(); // consume the number
     return std::move(Result);
 }
+static std::unique_ptr<ExprAST> ParseExpression();
 
 static std::unique_ptr<ExprAST> ParseIdentifierOrCallExpr()
 {
@@ -221,6 +223,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierOrCallExpr()
     getNextToken();
     return std::make_unique<CallExprAST>(IdName, std::move(Args));
 };
+static std::unique_ptr<ExprAST> ParseParenExpr();
 
 static std::unique_ptr<ExprAST> ParsePrimary()
 {
@@ -237,7 +240,8 @@ static std::unique_ptr<ExprAST> ParsePrimary()
         return ParseParenExpr();
     }
 }
-
+static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
+                                              std::unique_ptr<ExprAST> LHS);
 /// expression
 ///   ::= primary binoprhs
 ///
@@ -249,6 +253,7 @@ static std::unique_ptr<ExprAST> ParseExpression()
 
     return ParseBinOpRHS(0, std::move(LHS));
 }
+static int GetTokPrecedence();
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
                                               std::unique_ptr<ExprAST> LHS)
 {
@@ -367,10 +372,11 @@ static std::unique_ptr<FunctionAST> ParseDefinition()
         return nullptr;
     }
 
-    if (auto E = ParseExpression)
+    if (auto E = ParseExpression())
     {
         return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
     }
+    return nullptr;
 }
 
 static std::unique_ptr<PrototypeAST> ParseExtern()
@@ -387,7 +393,8 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
     {
         // Make an anonymous proto.
         // no name and no args
-        auto Proto = std::make_unique<PrototypeAST>("", std::vector<std::string>());
+        auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
+                                                    std::vector<std::string>());
         return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
     }
     return nullptr;
