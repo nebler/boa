@@ -188,11 +188,12 @@ static std::unique_ptr<ExprAST> ParseIdentifierOrCallExpr()
 {
     std::string IdName = IdentifierStr;
 
+    getNextToken(); // eatIdentifier
     if (CurTok != '(')
     {
         return std::make_unique<VariableExprAST>(IdName);
     }
-    getNextToken(); // eatIdentifier
+    getNextToken(); // (
     std::vector<std::unique_ptr<ExprAST>> Args;
 
     if (CurTok != ')')
