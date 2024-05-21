@@ -120,41 +120,119 @@ class NumberExprAST : public ExprAST
 public:
     NumberExprAST(double Val) : Val(Val) {}
     // TODO: use a visitor pattern here
-    virtual Value *codegen();
+    Value *codegen();
 };
+
+Value *NumberExprAST::codegen()
+{
+    // Just creates a constantfp
+    return ConstantFP::get(*TheContext, APFloat(Val));
+}
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
 class VariableExprAST : public ExprAST
 {
     std::string Name;
+    // have to impement it
+    Value *codegen();
 
 public:
     VariableExprAST(const std::string &Name) : Name(Name) {}
 };
+
+Value *VariableExprAST::codegen()
+{
+    // Look this variable up in the function.
+    Value *V = NamedValues[Name];
+    if (!V)
+        LogErrorV("Unknown variable name");
+    return V;
+}
 
 /// BinaryExprAST - Expression class for a binary operator.
 class BinaryExprAST : public ExprAST
 {
     char Op;
     std::unique_ptr<ExprAST> LHS, RHS;
+    Value *codegen();
 
 public:
     BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS)
-        : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+        : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS))
+    {
+    }
 };
+
+Value *BinaryExprAST::codegen()
+{
+    // we generate code for the right as well as the left hand side
+    Value *L = LHS->codegen();
+    Value *R = RHS->codegen();
+    if (!L || !R)
+    {
+        return nullptr;
+    }
+    switch (Op)
+    {
+    case '+':
+        return Builder->CreateFAdd(L, R, "addtmp");
+    case '-':
+        return Builder->CreateFSub(L, R, "subtmp");
+    case '*':
+        return Builder->CreateFMul(L, R, "multmp");
+    case '<':
+        // TODO: understand this
+        L = Builder->CreateFCmpULT(L, R, "cmptmp");
+        // Convert bool 0/1 to double 0.0 or 1.0
+        return Builder->CreateUIToFP(L, Type::getDoubleTy(*TheContext),
+                                     "booltmp");
+    default:
+        return LogErrorV("invalid binary operator");
+    }
+}
 
 /// CallExprAST - Expression class for function calls.
 class CallExprAST : public ExprAST
 {
     std::string Callee;
     std::vector<std::unique_ptr<ExprAST>> Args;
+    Value *codegen();
 
 public:
     CallExprAST(const std::string &Callee,
                 std::vector<std::unique_ptr<ExprAST>> Args)
-        : Callee(Callee), Args(std::move(Args)) {}
+        : Callee(Callee),
+          Args(std::move(Args)) {}
 };
+
+Value *CallExprAST::codegen()
+{
+    // Look up the name in the global module table.
+    Function *CalleeF = TheModule->getFunction(Callee);
+    if (CalleeF)
+    {
+        return LogErrorV("Unknown funciton refeenced");
+    }
+
+    // if there is argument mismatch error
+    if (CalleeF->arg_size() != Args.size())
+    {
+        return LogErrorV("Incorrec # arguments passed");
+    }
+
+    std::vector<Value *> ArgsV;
+    for (unsigned i = 0, e = Args.size(); i != e; i++)
+    {
+        // for every argument generate the code
+        ArgsV.push_back(Args[i]->codegen());
+        if (!ArgsV.back())
+        {
+            return nullptr;
+        }
+    }
+    return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+}
 
 /// PrototypeAST - This class represents the "prototype" for a function,
 /// which captures its name, and its argument names (thus implicitly the number
@@ -488,6 +566,12 @@ static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
 static std::unique_ptr<IRBuilder<>> Builder;
 static std::map<std::string, Value *> NamedValues;
+
+Value *LogErrorV(const char *Str)
+{
+    LogError(Str);
+    return nullptr;
+}
 
 int main()
 {
