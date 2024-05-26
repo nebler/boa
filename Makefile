@@ -1,8 +1,9 @@
 CXX = clang++
 
-TARGET ?= my-lang
+TARGET ?= toy
 
-SRCS ?= my-lang.cc
+SRCS ?= toy.cpp
+
 
 # Define the necessary LLVM configuration flags
 LLVM_CONFIG = llvm-config

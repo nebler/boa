@@ -248,12 +248,12 @@ class PrototypeAST
 {
     std::string Name;
     std::vector<std::string> Args;
-    Function *codegen();
 
 public:
     PrototypeAST(const std::string &Name, std::vector<std::string> Args)
         : Name(Name), Args(std::move(Args)) {}
 
+    Function *codegen();
     const std::string &getName() const { return Name; }
 };
 
@@ -285,10 +285,63 @@ class FunctionAST
     std::unique_ptr<ExprAST> Body;
 
 public:
+    Function *codegen();
     FunctionAST(std::unique_ptr<PrototypeAST> Proto,
                 std::unique_ptr<ExprAST> Body)
         : Proto(std::move(Proto)), Body(std::move(Body)) {}
 };
+
+Function *FunctionAST::codegen()
+{
+    Function *TheFunction = TheModule->getFunction(Proto->getName());
+    if (!TheFunction)
+    {
+        TheFunction = Proto->codegen();
+    }
+
+    Value *val = Body->codegen();
+
+    if (!TheFunction)
+    {
+        return nullptr;
+    }
+
+    if (!TheFunction->empty())
+    {
+        return (Function *)LogErrorV("Function cannot be redefined.");
+    }
+    // Now we get to the point where the Builder is set up. The first line creates a new basic block (named “entry”), which is inserted into TheFunction.
+    BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
+    Builder->SetInsertPoint(BB);
+
+    // Record the function arguments in the NamedValues map.
+    // Next we add the function arguments to the NamedValues map (after first clearing it out) so that they’re accessible to VariableExprAST nodes.
+    NamedValues.clear();
+    for (auto &Arg : TheFunction->args())
+    {
+        NamedValues[std::string(Arg.getName())] = &Arg;
+    }
+
+    if (Value *RetVal = Body->codegen())
+    {
+        /*
+        ret <type> <value>       ; Return a value from a non-void function
+        ret void                 ; Return from void function
+
+        The ‘ret’ instruction is used to return control flow (and optionally a value) from a function back to the caller.
+        There are two forms of the ‘ret’ instruction: one that returns a value and then causes control flow, and one that just causes control flow to occur.
+        */
+        Builder->CreateRet(RetVal);
+        // Validate the generated code, checking for consistency.
+        verifyFunction(*TheFunction);
+
+        return TheFunction;
+    }
+
+    // Error reading body, remove function.
+    TheFunction->eraseFromParent();
+    return nullptr;
+}
 
 //===----------------------------------------------------------------------===//
 // Parser
@@ -510,6 +563,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition()
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
 {
+
     if (auto E = ParseExpression())
     {
         // Make an anonymous proto.
@@ -527,15 +581,26 @@ static std::unique_ptr<PrototypeAST> ParseExtern()
     return ParsePrototype();
 }
 
-//===----------------------------------------------------------------------===//
-// Top-Level parsing
-//===----------------------------------------------------------------------===//
+static void InitializeModule()
+{
+    // Open a new context and module.
+    TheContext = std::make_unique<LLVMContext>();
+    TheModule = std::make_unique<Module>("my cool jit", *TheContext);
+
+    // Create a new builder for the module.
+    Builder = std::make_unique<IRBuilder<>>(*TheContext);
+}
 
 static void HandleDefinition()
 {
-    if (ParseDefinition())
+    if (auto FnAST = ParseDefinition())
     {
-        fprintf(stderr, "Parsed a function definition.\n");
+        if (auto *FnIR = FnAST->codegen())
+        {
+            fprintf(stderr, "Read function definition:");
+            FnIR->print(errs());
+            fprintf(stderr, "\n");
+        }
     }
     else
     {
@@ -546,9 +611,14 @@ static void HandleDefinition()
 
 static void HandleExtern()
 {
-    if (ParseExtern())
+    if (auto ProtoAST = ParseExtern())
     {
-        fprintf(stderr, "Parsed an extern\n");
+        if (auto *FnIR = ProtoAST->codegen())
+        {
+            fprintf(stderr, "Read extern: ");
+            FnIR->print(errs());
+            fprintf(stderr, "\n");
+        }
     }
     else
     {
@@ -560,9 +630,17 @@ static void HandleExtern()
 static void HandleTopLevelExpression()
 {
     // Evaluate a top-level expression into an anonymous function.
-    if (ParseTopLevelExpr())
+    if (auto FnAST = ParseTopLevelExpr())
     {
-        fprintf(stderr, "Parsed a top-level expr\n");
+        if (auto *FnIR = FnAST->codegen())
+        {
+            fprintf(stderr, "Read top-level expression:");
+            FnIR->print(errs());
+            fprintf(stderr, "\n");
+
+            // Remove the anonymous expression.
+            FnIR->eraseFromParent();
+        }
     }
     else
     {
@@ -597,6 +675,10 @@ static void MainLoop()
     }
 }
 
+//===----------------------------------------------------------------------===//
+// Main driver code.
+//===----------------------------------------------------------------------===//
+
 int main()
 {
     // Install standard binary operators.
@@ -610,8 +692,14 @@ int main()
     fprintf(stderr, "ready> ");
     getNextToken();
 
+    // Make the module, which holds all the code.
+    InitializeModule();
+
     // Run the main "interpreter loop" now.
     MainLoop();
+
+    // Print out all of the generated code.
+    TheModule->print(errs(), nullptr);
 
     return 0;
 }
