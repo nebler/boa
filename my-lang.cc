@@ -20,6 +20,11 @@
 
 using namespace llvm;
 
+static std::unique_ptr<LLVMContext> TheContext;
+static std::unique_ptr<Module> TheModule;
+static std::unique_ptr<IRBuilder<>> Builder;
+static std::map<std::string, Value *> NamedValues;
+Value *LogErrorV(const char *Str);
 //===----------------------------------------------------------------------===//
 // Lexer
 //===----------------------------------------------------------------------===//
@@ -237,10 +242,13 @@ Value *CallExprAST::codegen()
 /// PrototypeAST - This class represents the "prototype" for a function,
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes).
+// A prototype talks aber the external interface for a functionnot the value computed by an expression
+// this is also why it doesnt return a llvm value but instead returns a llvm function
 class PrototypeAST
 {
     std::string Name;
     std::vector<std::string> Args;
+    Function *codegen();
 
 public:
     PrototypeAST(const std::string &Name, std::vector<std::string> Args)
@@ -248,6 +256,27 @@ public:
 
     const std::string &getName() const { return Name; }
 };
+
+Function *PrototypeAST::codegen()
+{
+    // Make the function type:  double(double,double) etc.
+    std::vector<Type *> Doubles(Args.size(), Type::getDoubleTy(*TheContext));
+    // The call to FunctionType::get creates the FunctionType that should be used for a given Prototype.
+    // Since all function arguments in Kaleidoscope are of type double, the first line creates a vector of “N” LLVM double types.
+    // It then uses the Functiontype::get method to create a function type that takes “N” doubles as arguments, returns one double as a result,
+    // and that is not vararg (the false parameter indicates this). Note that Types in LLVM are uniqued just like
+    // Constants are, so you don’t “new” a type, you “get” it.
+    FunctionType *FT = FunctionType::get(Type::getDoubleTy(*TheContext), Doubles, false);
+    // creates the IR function corresponding to the Prototype
+    Function *F = Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
+
+    // Set names for all arguments from function from above
+    unsigned Idx = 0;
+    for (auto &Arg : F->args())
+        Arg.setName(Args[Idx++]);
+
+    return F;
+}
 
 /// FunctionAST - This class represents a function definition itself.
 class FunctionAST
@@ -295,6 +324,12 @@ std::unique_ptr<ExprAST> LogError(const char *Str)
     return nullptr;
 }
 std::unique_ptr<PrototypeAST> LogErrorP(const char *Str)
+{
+    LogError(Str);
+    return nullptr;
+}
+
+Value *LogErrorV(const char *Str)
 {
     LogError(Str);
     return nullptr;
@@ -560,17 +595,6 @@ static void MainLoop()
             break;
         }
     }
-}
-
-static std::unique_ptr<LLVMContext> TheContext;
-static std::unique_ptr<Module> TheModule;
-static std::unique_ptr<IRBuilder<>> Builder;
-static std::map<std::string, Value *> NamedValues;
-
-Value *LogErrorV(const char *Str)
-{
-    LogError(Str);
-    return nullptr;
 }
 
 int main()
