@@ -29,24 +29,8 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "KaleidoscopeJIT.h"
 
 using namespace llvm;
-using namespace llvm::orc;
-
-static std::unique_ptr<LLVMContext> TheContext;
-static std::unique_ptr<Module> TheModule;
-static std::unique_ptr<IRBuilder<>> Builder;
-static std::map<std::string, Value *> NamedValues;
-static std::unique_ptr<KaleidoscopeJIT> TheJIT;
-static std::unique_ptr<FunctionPassManager> TheFPM;
-static std::unique_ptr<LoopAnalysisManager> TheLAM;
-static std::unique_ptr<FunctionAnalysisManager> TheFAM;
-static std::unique_ptr<CGSCCAnalysisManager> TheCGAM;
-static std::unique_ptr<ModuleAnalysisManager> TheMAM;
-static std::unique_ptr<PassInstrumentationCallbacks> ThePIC;
-static std::unique_ptr<StandardInstrumentations> TheSI;
-static ExitOnError ExitOnErr;
 
 Value *LogErrorV(const char *Str);
 //===----------------------------------------------------------------------===//
@@ -131,6 +115,18 @@ static int gettok()
 // Abstract Syntax Tree (aka Parse Tree)
 //===----------------------------------------------------------------------===//
 
+static std::unique_ptr<LLVMContext> TheContext;
+static std::unique_ptr<Module> TheModule;
+static std::unique_ptr<IRBuilder<>> Builder;
+static std::map<std::string, Value *> NamedValues;
+static std::unique_ptr<FunctionPassManager> TheFPM;
+static std::unique_ptr<LoopAnalysisManager> TheLAM;
+static std::unique_ptr<FunctionAnalysisManager> TheFAM;
+static std::unique_ptr<CGSCCAnalysisManager> TheCGAM;
+static std::unique_ptr<ModuleAnalysisManager> TheMAM;
+static std::unique_ptr<PassInstrumentationCallbacks> ThePIC;
+static std::unique_ptr<StandardInstrumentations> TheSI;
+static ExitOnError ExitOnErr;
 /// ExprAST - Base class for all expression nodes.
 class ExprAST
 {
@@ -239,7 +235,7 @@ Value *CallExprAST::codegen()
 {
     // Look up the name in the global module table.
     Function *CalleeF = TheModule->getFunction(Callee);
-    if (CalleeF)
+    if (!CalleeF)
     {
         return LogErrorV("Unknown funciton refeenced");
     }
@@ -607,12 +603,11 @@ static std::unique_ptr<PrototypeAST> ParseExtern()
     return ParsePrototype();
 }
 
-static void InitializeModule()
+static void InitializeModuleAndManagers()
 {
     // Open a new context and module.
     TheContext = std::make_unique<LLVMContext>();
     TheModule = std::make_unique<Module>("KaleidoscopeJIT", *TheContext);
-    TheModule->setDataLayout(TheJIT->getDataLayout());
 
     // Create a new builder for the module.
     Builder = std::make_unique<IRBuilder<>>(*TheContext);
@@ -745,9 +740,8 @@ int main()
     // Prime the first token.
     fprintf(stderr, "ready> ");
     getNextToken();
-
     // Make the module, which holds all the code.
-    InitializeModule();
+    InitializeModuleAndManagers();
 
     // Run the main "interpreter loop" now.
     MainLoop();
