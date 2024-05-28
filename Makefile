@@ -1,15 +1,15 @@
 CXX = clang++
 
-TARGET ?= toy
+TARGET ?= my-lang
 
-SRCS ?= toy.cpp
+SRCS ?= my-lang.cpp
 
 
 # Define the necessary LLVM configuration flags
 LLVM_CONFIG = llvm-config
 LLVM_CXXFLAGS = $(shell $(LLVM_CONFIG) --cxxflags)
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
-LLVM_LIBS = $(shell $(LLVM_CONFIG) --system-libs --libs core)
+LLVM_LIBS = $(shell $(LLVM_CONFIG) --system-libs --libs core orcjit native)
 
 # extra flag needed for the linker and homebrew
 EXTRA_LDFLAGS = -L/opt/homebrew/Cellar/zstd/1.5.6/lib
