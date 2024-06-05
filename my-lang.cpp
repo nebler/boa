@@ -20,7 +20,8 @@
 #include "llvm/Transforms/Scalar/Reassociate.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 #include <algorithm>
-#include <cassert>
+#include "KaleidoscopeJIT.h"
+#include <assert.h>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -31,6 +32,7 @@
 #include <vector>
 
 using namespace llvm;
+using namespace orc;
 
 Value *LogErrorV(const char *Str);
 //===----------------------------------------------------------------------===//
@@ -116,6 +118,7 @@ static int gettok()
 //===----------------------------------------------------------------------===//
 
 static std::unique_ptr<LLVMContext> TheContext;
+static std::unique_ptr<KaleidoscopeJIT> TheJIT;
 static std::unique_ptr<Module> TheModule;
 static std::unique_ptr<IRBuilder<>> Builder;
 static std::map<std::string, Value *> NamedValues;
@@ -683,12 +686,30 @@ static void HandleTopLevelExpression()
     {
         if (auto *FnIR = FnAST->codegen())
         {
-            fprintf(stderr, "Read top-level expression:");
-            FnIR->print(errs());
-            fprintf(stderr, "\n");
+            // Create a ResourceTracker to track JIT'd memory allocated to our
+            // anonymous expression -- that way we can free it after executing.
+            auto RT = TheJIT->getMainJITDylib().createResourceTracker();
 
-            // Remove the anonymous expression.
-            FnIR->eraseFromParent();
+            // Once the module has been added to the JIT it can no longer be modified
+            auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
+            ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
+
+            // todo: why do we need to call this again?
+            // from docs: Once the module has been added to the JIT it can no longer be modified,
+            //  so we also open a new module to hold subsequent code by calling InitializeModuleAndPassManager().
+            InitializeModuleAndManagers();
+
+            // Search the JIT for the __anon_expr symbol.
+            auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
+            assert(ExprSymbol.getAddress().getValue() != 0 && "Function not found");
+
+            // Get the symbol's address and cast it to the right type (takes no
+            // arguments, returns a double) so we can call it as a native function.
+            double (*FP)() = ExprSymbol.getAddress().toPtr<double (*)()>();
+            fprintf(stderr, "Evaluated to %f\n", FP());
+
+            // Delete the anonymous expression module from the JIT.
+            ExitOnErr(RT->remove());
         }
     }
     else
@@ -745,7 +766,8 @@ int main()
 
     // Run the main "interpreter loop" now.
     MainLoop();
-
+    // FIX: no matching constructor for initialization of 'llvm::orc::KaleidoscopeJIT'
+    TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
     // Print out all of the generated code.
     TheModule->print(errs(), nullptr);
 
