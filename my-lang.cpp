@@ -701,7 +701,7 @@ static void HandleTopLevelExpression()
 
             // Search the JIT for the __anon_expr symbol.
             auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
-            assert(ExprSymbol.getAddress().getValue() != 0 && "Function not found");
+            // assert(ExprSymbol.getAddress().getValue() != 0 && "Function not found");
 
             // Get the symbol's address and cast it to the right type (takes no
             // arguments, returns a double) so we can call it as a native function.
@@ -764,10 +764,11 @@ int main()
     // Make the module, which holds all the code.
     InitializeModuleAndManagers();
 
+    // todo: check the Create Method and understand the expected type
+    // is it similar to rust type?
+    TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
     // Run the main "interpreter loop" now.
     MainLoop();
-    // FIX: no matching constructor for initialization of 'llvm::orc::KaleidoscopeJIT'
-    TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
     // Print out all of the generated code.
     TheModule->print(errs(), nullptr);
 
