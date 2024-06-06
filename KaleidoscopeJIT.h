@@ -69,8 +69,7 @@ namespace llvm
 
             ~KaleidoscopeJIT()
             {
-                if (auto Err = ES->endSession())
-                    ES->reportError(std::move(Err));
+                ES->endSession();
             }
 
             static Expected<std::unique_ptr<KaleidoscopeJIT>> Create()

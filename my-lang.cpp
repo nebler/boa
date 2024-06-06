@@ -611,10 +611,9 @@ static void InitializeModuleAndManagers()
     // Open a new context and module.
     TheContext = std::make_unique<LLVMContext>();
     TheModule = std::make_unique<Module>("KaleidoscopeJIT", *TheContext);
-
+    TheModule->setDataLayout(TheJIT->getDataLayout());
     // Create a new builder for the module.
     Builder = std::make_unique<IRBuilder<>>(*TheContext);
-
     // Create new pass and analysis managers.
     TheFPM = std::make_unique<FunctionPassManager>();
     TheLAM = std::make_unique<LoopAnalysisManager>();
@@ -686,6 +685,9 @@ static void HandleTopLevelExpression()
     {
         if (auto *FnIR = FnAST->codegen())
         {
+            fprintf(stderr, "Read top-level expression: \n");
+            FnIR->print(errs());
+            fprintf(stderr, "\n");
             // Create a ResourceTracker to track JIT'd memory allocated to our
             // anonymous expression -- that way we can free it after executing.
             auto RT = TheJIT->getMainJITDylib().createResourceTracker();
@@ -698,11 +700,9 @@ static void HandleTopLevelExpression()
             // from docs: Once the module has been added to the JIT it can no longer be modified,
             //  so we also open a new module to hold subsequent code by calling InitializeModuleAndPassManager().
             InitializeModuleAndManagers();
-
             // Search the JIT for the __anon_expr symbol.
             auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
             // assert(ExprSymbol.getAddress().getValue() != 0 && "Function not found");
-
             // Get the symbol's address and cast it to the right type (takes no
             // arguments, returns a double) so we can call it as a native function.
             double (*FP)() = ExprSymbol.getAddress().toPtr<double (*)()>();
@@ -751,6 +751,9 @@ static void MainLoop()
 
 int main()
 {
+    InitializeNativeTarget();
+    InitializeNativeTargetAsmPrinter();
+    InitializeNativeTargetAsmParser();
     // Install standard binary operators.
     // 1 is lowest precedence.
     BinopPrecedence['<'] = 10;
@@ -762,11 +765,11 @@ int main()
     fprintf(stderr, "ready> ");
     getNextToken();
     // Make the module, which holds all the code.
+    TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
     InitializeModuleAndManagers();
 
     // todo: check the Create Method and understand the expected type
     // is it similar to rust type?
-    TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
     // Run the main "interpreter loop" now.
     MainLoop();
     // Print out all of the generated code.
