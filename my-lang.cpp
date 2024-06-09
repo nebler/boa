@@ -29,6 +29,8 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <iostream>
+
 #include <vector>
 
 using namespace llvm;
@@ -131,6 +133,28 @@ static std::unique_ptr<PassInstrumentationCallbacks> ThePIC;
 static std::unique_ptr<StandardInstrumentations> TheSI;
 static ExitOnError ExitOnErr;
 /// ExprAST - Base class for all expression nodes.
+
+/// PrototypeAST - This class represents the "prototype" for a function,
+/// which captures its name, and its argument names (thus implicitly the number
+/// of arguments the function takes).
+// A prototype talks aber the external interface for a functionnot the value computed by an expression
+// this is also why it doesnt return a llvm value but instead returns a llvm function
+class PrototypeAST
+{
+    std::string Name;
+    std::vector<std::string> Args;
+
+public:
+    PrototypeAST(const std::string &Name, std::vector<std::string> Args)
+        : Name(Name), Args(std::move(Args)) {}
+
+    Function *codegen();
+    const std::string &getName() const { return Name; }
+    std::vector<std::string> &getArgs() { return Args; }
+};
+
+static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+
 class ExprAST
 {
 public:
@@ -220,6 +244,22 @@ Value *BinaryExprAST::codegen()
     }
 }
 
+Function *getFunction(std::string Name)
+{
+    // First, see if the function has already been added to the current module.
+    if (auto *F = TheModule->getFunction(Name))
+        return F;
+
+    // If not, check whether we can codegen the declaration from some existing
+    // prototype.
+    auto FI = FunctionProtos.find(Name);
+    if (FI != FunctionProtos.end())
+        return FI->second->codegen();
+
+    // If no existing prototype exists, return null.
+    return nullptr;
+}
+
 /// CallExprAST - Expression class for function calls.
 class CallExprAST : public ExprAST
 {
@@ -237,7 +277,7 @@ public:
 Value *CallExprAST::codegen()
 {
     // Look up the name in the global module table.
-    Function *CalleeF = TheModule->getFunction(Callee);
+    Function *CalleeF = getFunction(Callee);
     if (!CalleeF)
     {
         return LogErrorV("Unknown funciton refeenced");
@@ -261,24 +301,6 @@ Value *CallExprAST::codegen()
     }
     return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
 }
-
-/// PrototypeAST - This class represents the "prototype" for a function,
-/// which captures its name, and its argument names (thus implicitly the number
-/// of arguments the function takes).
-// A prototype talks aber the external interface for a functionnot the value computed by an expression
-// this is also why it doesnt return a llvm value but instead returns a llvm function
-class PrototypeAST
-{
-    std::string Name;
-    std::vector<std::string> Args;
-
-public:
-    PrototypeAST(const std::string &Name, std::vector<std::string> Args)
-        : Name(Name), Args(std::move(Args)) {}
-
-    Function *codegen();
-    const std::string &getName() const { return Name; }
-};
 
 Function *PrototypeAST::codegen()
 {
@@ -316,18 +338,11 @@ public:
 
 Function *FunctionAST::codegen()
 {
-    Function *TheFunction = TheModule->getFunction(Proto->getName());
+    auto &P = *Proto;
+    FunctionProtos[Proto->getName()] = std::move(Proto);
+    Function *TheFunction = getFunction(P.getName());
     if (!TheFunction)
-    {
-        TheFunction = Proto->codegen();
-    }
-
-    Value *val = Body->codegen();
-
-    if (!TheFunction)
-    {
         return nullptr;
-    }
 
     if (!TheFunction->empty())
     {
@@ -444,9 +459,11 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr()
     std::string IdName = IdentifierStr;
 
     getNextToken(); // eat identifier.
-
-    if (CurTok != '(') // Simple variable ref.
+                    // Simple variable ref.
+    if (CurTok != '(')
+    {
         return std::make_unique<VariableExprAST>(IdName);
+    }
 
     // Call.
     getNextToken(); // eat (
@@ -561,7 +578,9 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
 
     std::vector<std::string> ArgNames;
     while (getNextToken() == tok_identifier)
+    {
         ArgNames.push_back(IdentifierStr);
+    }
     if (CurTok != ')')
         return LogErrorP("Expected ')' in prototype");
 
@@ -575,7 +594,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
 static std::unique_ptr<FunctionAST> ParseDefinition()
 {
     getNextToken(); // eat def.
-    auto Proto = ParsePrototype();
+    std::unique_ptr<PrototypeAST> Proto = ParsePrototype();
     if (!Proto)
         return nullptr;
 
@@ -590,6 +609,7 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
 
     if (auto E = ParseExpression())
     {
+        printf("parsing top level expression \n");
         // Make an anonymous proto.
         auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
                                                     std::vector<std::string>());
@@ -597,7 +617,6 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
     }
     return nullptr;
 }
-static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 
 /// external ::= 'extern' prototype
 static std::unique_ptr<PrototypeAST> ParseExtern()
@@ -651,6 +670,9 @@ static void HandleDefinition()
             fprintf(stderr, "Read function definition:");
             FnIR->print(errs());
             fprintf(stderr, "\n");
+            ExitOnErr(TheJIT->addModule(
+                ThreadSafeModule(std::move(TheModule), std::move(TheContext))));
+            InitializeModuleAndManagers();
         }
     }
     else
@@ -683,31 +705,26 @@ static void HandleTopLevelExpression()
     // Evaluate a top-level expression into an anonymous function.
     if (auto FnAST = ParseTopLevelExpr())
     {
-        if (auto *FnIR = FnAST->codegen())
+        if (FnAST->codegen())
         {
             fprintf(stderr, "Read top-level expression: \n");
-            FnIR->print(errs());
             fprintf(stderr, "\n");
             // Create a ResourceTracker to track JIT'd memory allocated to our
             // anonymous expression -- that way we can free it after executing.
             auto RT = TheJIT->getMainJITDylib().createResourceTracker();
-
-            // Once the module has been added to the JIT it can no longer be modified
             auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
             ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
-
             // todo: why do we need to call this again?
             // from docs: Once the module has been added to the JIT it can no longer be modified,
             //  so we also open a new module to hold subsequent code by calling InitializeModuleAndPassManager().
             InitializeModuleAndManagers();
             // Search the JIT for the __anon_expr symbol.
             auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
-            // assert(ExprSymbol.getAddress().getValue() != 0 && "Function not found");
+            assert(ExprSymbol.getAddress().getValue() != 0 && "Function not found");
             // Get the symbol's address and cast it to the right type (takes no
             // arguments, returns a double) so we can call it as a native function.
             double (*FP)() = ExprSymbol.getAddress().toPtr<double (*)()>();
             fprintf(stderr, "Evaluated to %f\n", FP());
-
             // Delete the anonymous expression module from the JIT.
             ExitOnErr(RT->remove());
         }

@@ -1,3 +1,4 @@
 .vscode
 .envrc
-./my-lang
+my-lang
+my-lang.dSYM/Contents
