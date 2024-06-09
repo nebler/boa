@@ -691,13 +691,40 @@ static void HandleExtern()
             fprintf(stderr, "Read extern: ");
             FnIR->print(errs());
             fprintf(stderr, "\n");
+            FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
+        }
+        else
+        {
+            printf("no codegen");
         }
     }
     else
     {
+        printf("no extern");
         // Skip token for error recovery.
         getNextToken();
     }
+}
+
+#ifdef _WIN32
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
+/// putchard - putchar that takes a double and returns 0.
+extern "C" DLLEXPORT double putchard(double X)
+{
+    fputc((char)X, stderr);
+    printf("\n");
+    return 0;
+}
+
+/// printd - printf that takes a double prints it as "%f\n", returning 0.
+extern "C" DLLEXPORT double printd(double X)
+{
+    fprintf(stderr, "%f \n\n", X);
+    return 0;
 }
 
 static void HandleTopLevelExpression()
@@ -705,9 +732,10 @@ static void HandleTopLevelExpression()
     // Evaluate a top-level expression into an anonymous function.
     if (auto FnAST = ParseTopLevelExpr())
     {
-        if (FnAST->codegen())
+        if (auto *FnIR = FnAST->codegen())
         {
             fprintf(stderr, "Read top-level expression: \n");
+            FnIR->print(errs());
             fprintf(stderr, "\n");
             // Create a ResourceTracker to track JIT'd memory allocated to our
             // anonymous expression -- that way we can free it after executing.
