@@ -37,6 +37,9 @@ using namespace llvm;
 using namespace orc;
 
 Value *LogErrorV(const char *Str);
+/// BinopPrecedence - This holds the precedence for each binary operator that is
+/// defined.
+static std::map<char, int> BinopPrecedence;
 //===----------------------------------------------------------------------===//
 // Lexer
 //===----------------------------------------------------------------------===//
@@ -255,6 +258,19 @@ public:
     }
 };
 
+/// UnaryExprAST - Expression class for a unary operator.
+class UnaryExprAST : public ExprAST
+{
+    char Opcode;
+    std::unique_ptr<ExprAST> Operand;
+
+public:
+    UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
+        : Opcode(Opcode), Operand(std::move(Operand)) {}
+
+    Value *codegen() override;
+};
+
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST
 {
@@ -341,6 +357,22 @@ Value *IfExprAST::codegen()
     return PN;
 }
 
+Function *getFunction(std::string Name)
+{
+    // First, see if the function has already been added to the current module.
+    if (auto *F = TheModule->getFunction(Name))
+        return F;
+
+    // If not, check whether we can codegen the declaration from some existing
+    // prototype.
+    auto FI = FunctionProtos.find(Name);
+    if (FI != FunctionProtos.end())
+        return FI->second->codegen();
+
+    // If no existing prototype exists, return null.
+    return nullptr;
+}
+
 Value *BinaryExprAST::codegen()
 {
     // we generate code for the right as well as the left hand side
@@ -365,7 +397,7 @@ Value *BinaryExprAST::codegen()
         return Builder->CreateUIToFP(L, Type::getDoubleTy(*TheContext),
                                      "booltmp");
     default:
-        return LogErrorV("invalid binary operator");
+        break;
     }
 
     // If it wasn't a builtin binary operator, it must be a user defined one. Emit
@@ -375,22 +407,6 @@ Value *BinaryExprAST::codegen()
 
     Value *Ops[2] = {L, R};
     return Builder->CreateCall(F, Ops, "binop");
-}
-
-Function *getFunction(std::string Name)
-{
-    // First, see if the function has already been added to the current module.
-    if (auto *F = TheModule->getFunction(Name))
-        return F;
-
-    // If not, check whether we can codegen the declaration from some existing
-    // prototype.
-    auto FI = FunctionProtos.find(Name);
-    if (FI != FunctionProtos.end())
-        return FI->second->codegen();
-
-    // If no existing prototype exists, return null.
-    return nullptr;
 }
 
 /// CallExprAST - Expression class for function calls.
@@ -568,6 +584,19 @@ public:
         : Proto(std::move(Proto)), Body(std::move(Body)) {}
 };
 
+Value *UnaryExprAST::codegen()
+{
+    Value *OperandV = Operand->codegen();
+    if (!OperandV)
+        return nullptr;
+
+    Function *F = getFunction(std::string("unary") + Opcode);
+    if (!F)
+        return LogErrorV("Unknown unary operator");
+
+    return Builder->CreateCall(F, OperandV, "unop");
+}
+
 Function *FunctionAST::codegen()
 {
     // Transfer ownership of the prototype to the FunctionProtos map, but keep a
@@ -624,10 +653,6 @@ Function *FunctionAST::codegen()
 /// lexer and updates CurTok with its results.
 static int CurTok;
 static int getNextToken() { return CurTok = gettok(); }
-
-/// BinopPrecedence - This holds the precedence for each binary operator that is
-/// defined.
-static std::map<char, int> BinopPrecedence;
 
 /// GetTokPrecedence - Get the precedence of the pending binary operator token.
 static int GetTokPrecedence()
@@ -827,6 +852,23 @@ static std::unique_ptr<ExprAST> ParsePrimary()
     }
 }
 
+/// unary
+///   ::= primary
+///   ::= '!' unary
+static std::unique_ptr<ExprAST> ParseUnary()
+{
+    // If the current token is not an operator, it must be a primary expr.
+    if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
+        return ParsePrimary();
+
+    // If this is a unary operator, read it.
+    int Opc = CurTok;
+    getNextToken();
+    if (auto Operand = ParseUnary())
+        return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
+    return nullptr;
+}
+
 /// binoprhs
 ///   ::= ('+' primary)*
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
@@ -846,11 +888,10 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
         int BinOp = CurTok;
         getNextToken(); // eat binop
 
-        // Parse the primary expression after the binary operator.
-        auto RHS = ParsePrimary();
+        // Parse the unary expression after the binary operator.
+        auto RHS = ParseUnary();
         if (!RHS)
             return nullptr;
-
         // If BinOp binds less tightly with RHS than the operator after RHS, let
         // the pending operator take RHS as its LHS.
         int NextPrec = GetTokPrecedence();
@@ -868,11 +909,11 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
 }
 
 /// expression
-///   ::= primary binoprhs
+///   ::= unary binoprhs
 ///
 static std::unique_ptr<ExprAST> ParseExpression()
 {
-    auto LHS = ParsePrimary();
+    auto LHS = ParseUnary();
     if (!LHS)
         return nullptr;
 
@@ -894,6 +935,15 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
     case tok_identifier:
         FnName = IdentifierStr;
         Kind = 0;
+        getNextToken();
+        break;
+    case tok_unary:
+        getNextToken();
+        if (!isascii(CurTok))
+            return LogErrorP("Expected unary operator");
+        FnName = "unary";
+        FnName += (char)CurTok;
+        Kind = 1;
         getNextToken();
         break;
     case tok_binary:
@@ -1062,14 +1112,13 @@ static void HandleExtern()
 extern "C" DLLEXPORT double putchard(double X)
 {
     fputc((char)X, stderr);
-    printf("\n");
     return 0;
 }
 
 /// printd - printf that takes a double prints it as "%f\n", returning 0.
 extern "C" DLLEXPORT double printd(double X)
 {
-    fprintf(stderr, "%f \n\n", X);
+    fprintf(stderr, "%f \n", X);
     return 0;
 }
 
