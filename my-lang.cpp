@@ -1107,13 +1107,6 @@ static void InitializeModuleAndManagers()
     // Simplify the control flow graph (deleting unreachable blocks, etc).
     TheFPM->addPass(SimplifyCFGPass());
 
-    // Promote allocas to registers.
-    TheFPM->addPass(createPromoteMemoryToRegisterPass());
-    // Do simple "peephole" optimizations and bit-twiddling optzns.
-    TheFPM->addPass(createInstructionCombiningPass());
-    // Reassociate expressions.
-    TheFPM->add(createReassociatePass());
-
     // Register analysis passes used in these transform passes.
     PassBuilder PB;
     PB.registerModuleAnalyses(*TheMAM);
