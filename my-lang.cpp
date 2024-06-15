@@ -54,6 +54,9 @@ static std::map<char, int> BinopPrecedence;
 // of these for known things.
 enum Token
 {
+
+    // var definition
+    tok_var = -13,
     tok_eof = -1,
 
     // commands
@@ -110,6 +113,8 @@ static int gettok()
             return tok_binary;
         if (IdentifierStr == "unary")
             return tok_unary;
+        if (IdentifierStr == "var")
+            return tok_var;
         return tok_identifier;
     }
 
@@ -308,6 +313,70 @@ public:
 
     Value *codegen() override;
 };
+
+/// VarExprAST - Expression class for var/in
+class VarExprAST : public ExprAST
+{
+    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+    std::unique_ptr<ExprAST> Body;
+
+public:
+    VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+               std::unique_ptr<ExprAST> Body)
+        : VarNames(std::move(VarNames)), Body(std::move(Body)) {}
+
+    Value *codegen() override;
+};
+
+Value *VarExprAST::codegen()
+{
+    std::vector<AllocaInst *> OldBindings;
+
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+    // Register all variables and emit their initializer.
+    for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
+    {
+        const std::string &VarName = VarNames[i].first;
+        ExprAST *Init = VarNames[i].second.get();
+        // Emit the initializer before adding the variable to scope, this prevents
+        // the initializer from referencing the variable itself, and permits stuff
+        // like this:
+        //  var a = 1 in
+        //    var a = a in ...   # refers to outer 'a'.
+        Value *InitVal;
+        if (Init)
+        {
+            InitVal = Init->codegen();
+            if (!InitVal)
+                return nullptr;
+        }
+        else
+        { // If not specified, use 0.0.
+            InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
+        }
+
+        AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+        Builder->CreateStore(InitVal, Alloca);
+
+        // Remember the old variable binding so that we can restore the binding when
+        // we unrecurse.
+        OldBindings.push_back(NamedValues[VarName]);
+
+        // Remember this binding.
+        NamedValues[VarName] = Alloca;
+    }
+    // Codegen the body, now that all vars are in scope.
+    Value *BodyVal = Body->codegen();
+    if (!BodyVal)
+        return nullptr;
+    // Pop all our variables from scope.
+    for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
+        NamedValues[VarNames[i].first] = OldBindings[i];
+
+    // Return the body computation.
+    return BodyVal;
+}
 
 /// ForExprAST - Expression class for for/in.
 class ForExprAST : public ExprAST
@@ -886,6 +955,58 @@ static std::unique_ptr<ExprAST> ParseForExpr()
                                         std::move(Step), std::move(Body));
 }
 
+// varexpr ::= 'var' identifier ('=' expression)?
+//                    (',' identifier ('=' expression)?)* 'in' expression
+static std::unique_ptr<ExprAST> ParseVarExpr()
+{
+    getNextToken(); // eat the var.
+
+    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+    // At least one variable name is required.
+    // LHS has to be an identifier
+    if (CurTok != tok_identifier)
+        return LogError("expected identifier after var");
+
+    // this is a loop because we allow multiple variable definitions at once
+    // a, b, c = 4 + 5
+    while (true)
+    {
+        std::string Name = IdentifierStr;
+        getNextToken(); // eat identifier.
+
+        // Read the optional initializer.
+        std::unique_ptr<ExprAST> Init;
+        if (CurTok == '=')
+        {
+            getNextToken(); // eat the '='.
+
+            Init = ParseExpression();
+            if (!Init)
+                return nullptr;
+        }
+
+        VarNames.push_back(std::make_pair(Name, std::move(Init)));
+
+        // End of var list, exit loop.
+        if (CurTok != ',')
+            break;
+        getNextToken(); // eat the ','.
+
+        if (CurTok != tok_identifier)
+            return LogError("expected identifier list after var");
+    }
+    if (CurTok != tok_in)
+        return LogError("expected 'in' keyword after 'var'");
+    getNextToken(); // eat 'in'.
+
+    auto Body = ParseExpression();
+    if (!Body)
+        return nullptr;
+
+    return std::make_unique<VarExprAST>(std::move(VarNames),
+                                        std::move(Body));
+}
+
 /// primary
 ///   ::= identifierexpr
 ///   ::= numberexpr
@@ -906,6 +1027,8 @@ static std::unique_ptr<ExprAST> ParsePrimary()
         return ParseIfExpr();
     case tok_for:
         return ParseForExpr();
+    case tok_var:
+        return ParseVarExpr();
     }
 }
 
