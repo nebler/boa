@@ -2,7 +2,7 @@ CXX = clang++
 
 TARGET ?= my-lang
 
-SRCS ?= my-lang.cpp
+SRCS ?= my-lang.cpp lexer/tokenizer.cpp
 
 
 # Define the necessary LLVM configuration flags
