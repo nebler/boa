@@ -1,7 +1,8 @@
 
 
 #include "KaleidoscopeJIT.h"
-
+#include "lexer/token.h"
+#include "lexer/tokenizer.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -46,111 +47,6 @@ Value *LogErrorV(const char *Str);
 /// BinopPrecedence - This holds the precedence for each binary operator that is
 /// defined.
 static std::map<char, int> BinopPrecedence;
-//===----------------------------------------------------------------------===//
-// Lexer
-//===----------------------------------------------------------------------===//
-
-// The lexer returns tokens [0-255] if it is an unknown character, otherwise one
-// of these for known things.
-enum Token
-{
-
-    // var definition
-    tok_var = -13,
-    tok_eof = -1,
-
-    // commands
-    tok_def = -2,
-    tok_extern = -3,
-
-    // primary
-    tok_identifier = -4,
-    tok_number = -5,
-    // control
-    tok_if = -6,
-    tok_then = -7,
-    tok_else = -8,
-    tok_for = -9,
-    tok_in = -10,
-    // operators
-    tok_binary = -11,
-    tok_unary = -12
-};
-
-static std::string IdentifierStr; // Filled in if tok_identifier
-static double NumVal;             // Filled in if tok_number
-
-/// gettok - Return the next token from standard input.
-static int gettok()
-{
-    static int LastChar = ' ';
-
-    // Skip any whitespace.
-    while (isspace(LastChar))
-        LastChar = getchar();
-
-    if (isalpha(LastChar))
-    { // identifier: [a-zA-Z][a-zA-Z0-9]*
-        IdentifierStr = LastChar;
-        while (isalnum((LastChar = getchar())))
-            IdentifierStr += LastChar;
-
-        if (IdentifierStr == "def")
-            return tok_def;
-        if (IdentifierStr == "extern")
-            return tok_extern;
-        if (IdentifierStr == "if")
-            return tok_if;
-        if (IdentifierStr == "then")
-            return tok_then;
-        if (IdentifierStr == "else")
-            return tok_else;
-        if (IdentifierStr == "for")
-            return tok_for;
-        if (IdentifierStr == "in")
-            return tok_in;
-        if (IdentifierStr == "binary")
-            return tok_binary;
-        if (IdentifierStr == "unary")
-            return tok_unary;
-        if (IdentifierStr == "var")
-            return tok_var;
-        return tok_identifier;
-    }
-
-    if (isdigit(LastChar) || LastChar == '.')
-    { // Number: [0-9.]+
-        std::string NumStr;
-        do
-        {
-            NumStr += LastChar;
-            LastChar = getchar();
-        } while (isdigit(LastChar) || LastChar == '.');
-
-        NumVal = strtod(NumStr.c_str(), nullptr);
-        return tok_number;
-    }
-
-    if (LastChar == '#')
-    {
-        // Comment until end of line.
-        do
-            LastChar = getchar();
-        while (LastChar != EOF && LastChar != '\n' && LastChar != '\r');
-
-        if (LastChar != EOF)
-            return gettok();
-    }
-
-    // Check for end of file.  Don't eat the EOF.
-    if (LastChar == EOF)
-        return tok_eof;
-
-    // Otherwise, just return the character as its ascii value.
-    int ThisChar = LastChar;
-    LastChar = getchar();
-    return ThisChar;
-}
 
 //===----------------------------------------------------------------------===//
 // Abstract Syntax Tree (aka Parse Tree)
@@ -770,29 +666,6 @@ Function *FunctionAST::codegen()
     return nullptr;
 }
 
-//===----------------------------------------------------------------------===//
-// Parser
-//===----------------------------------------------------------------------===//
-
-/// CurTok/getNextToken - Provide a simple token buffer.  CurTok is the current
-/// token the parser is looking at.  getNextToken reads another token from the
-/// lexer and updates CurTok with its results.
-static int CurTok;
-static int getNextToken() { return CurTok = gettok(); }
-
-/// GetTokPrecedence - Get the precedence of the pending binary operator token.
-static int GetTokPrecedence()
-{
-    if (!isascii(CurTok))
-        return -1;
-
-    // Make sure it's a declared binop.
-    int TokPrec = BinopPrecedence[CurTok];
-    if (TokPrec <= 0)
-        return -1;
-    return TokPrec;
-}
-
 /// LogError* - These are little helper functions for error handling.
 std::unique_ptr<ExprAST> LogError(const char *Str)
 {
@@ -1057,7 +930,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     // If this is a binop, find its precedence.
     while (true)
     {
-        int TokPrec = GetTokPrecedence();
+        int TokPrec = GetTokPrecedence(&BinopPrecedence);
 
         // If this is a binop that binds at least as tightly as the current binop,
         // consume it, otherwise we are done.
@@ -1074,7 +947,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
             return nullptr;
         // If BinOp binds less tightly with RHS than the operator after RHS, let
         // the pending operator take RHS as its LHS.
-        int NextPrec = GetTokPrecedence();
+        int NextPrec = GetTokPrecedence(&BinopPrecedence);
         if (TokPrec < NextPrec)
         {
             RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
@@ -1315,6 +1188,7 @@ static void HandleTopLevelExpression()
             // Create a ResourceTracker to track JIT'd memory allocated to our
             // anonymous expression -- that way we can free it after executing.
             auto RT = TheJIT->getMainJITDylib().createResourceTracker();
+
             auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
             ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
             // todo: why do we need to call this again?
