@@ -9,7 +9,9 @@ class ArgumentTokenizer
 {
 
 public:
-    ArgumentTokenizer(char *argv[]) : argv(argv) {}
+    ArgumentTokenizer(char *argv[]) : argv(argv)
+    {
+    }
     vector<ArgTokens> GetArgumentTokens();
 
 private:
@@ -18,12 +20,19 @@ private:
 
 vector<ArgTokens> ArgumentTokenizer::GetArgumentTokens()
 {
-    vector<ArgTokens> tokens;
+    std::vector<ArgTokens> tokens;
     for (int i = 0; argv[i] != nullptr; ++i)
     {
-        tokens.emplace_back(argv[i]);
+        std::string arg_str = argv[i];
+        std::cout << arg_str << std::endl;
+        try
+        {
+            ArgTokens token = FromString(arg_str);
+            tokens.push_back(token);
+        }
+        catch (const std::invalid_argument &e)
+        {
+            std::cerr << "Warning: Unrecognized argument \"" << arg_str << "\"." << std::endl;
+        }
     }
-    std::cout << "we have a token" << std::endl;
-    tokens.push_back(cli_mode);
-    return tokens;
 }

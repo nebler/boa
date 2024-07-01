@@ -1247,6 +1247,14 @@ static void MainLoop()
 
 int main(int argc, char *argv[])
 {
+    // Simulate removing argv[0] by shifting elements
+    for (int i = 0; i < argc - 1; ++i)
+    {
+        argv[i] = argv[i + 1];
+    }
+
+    // Decrease argc to reflect the removal of argv[0]
+    --argc;
     auto foo = ArgumentTokenizer(argv);
     auto foo2 = foo.GetArgumentTokens();
     InitializeNativeTarget();
