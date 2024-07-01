@@ -35,4 +35,6 @@ vector<ArgTokens> ArgumentTokenizer::GetArgumentTokens()
             std::cerr << "Warning: Unrecognized argument \"" << arg_str << "\"." << std::endl;
         }
     }
+    std::cout << "return tokens" << std::endl;
+    return tokens;
 }
