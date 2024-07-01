@@ -3,6 +3,8 @@
 #include "KaleidoscopeJIT.h"
 #include "lexer/token.h"
 #include "lexer/tokenizer.h"
+#include "lexer/arguments/argument_tokenizer.h"
+#include "lexer/arguments/argument_token.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -1245,6 +1247,8 @@ static void MainLoop()
 
 int main(int argc, char *argv[])
 {
+    auto foo = ArgumentTokenizer(argv);
+    auto foo2 = foo.GetArgumentTokens();
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
