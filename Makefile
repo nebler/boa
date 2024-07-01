@@ -2,12 +2,12 @@ CXX = clang++
 
 TARGET ?= my-lang
 
-SRCS ?= my-lang.cpp lexer/tokenizer.cpp
+SRCS ?= my-lang.cpp lexer/tokenizer.cpp lexer/arguments/argument_tokenizer.cpp
 
 
 # Define the necessary LLVM configuration flags
 LLVM_CONFIG = llvm-config
-LLVM_CXXFLAGS = $(shell $(LLVM_CONFIG) --cxxflags)
+LLVM_CXXFLAGS = -I/usr/local/include -std=c++17 -funwind-tables -fno-rtti -DBUILD_EXAMPLES -D_DEBUG -D_GLIBCXX_ASSERTIONS -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
 LLVM_LIBS = $(shell $(LLVM_CONFIG) --system-libs --libs core orcjit native)
 

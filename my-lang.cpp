@@ -3,6 +3,8 @@
 #include "KaleidoscopeJIT.h"
 #include "lexer/token.h"
 #include "lexer/tokenizer.h"
+#include "lexer/arguments/argument_tokenizer.h"
+#include "lexer/arguments/argument_token.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -1243,8 +1245,18 @@ static void MainLoop()
 // Main driver code.
 //===----------------------------------------------------------------------===//
 
-int main()
+int main(int argc, char *argv[])
 {
+    // Simulate removing argv[0] by shifting elements
+    for (int i = 0; i < argc - 1; ++i)
+    {
+        argv[i] = argv[i + 1];
+    }
+
+    // Decrease argc to reflect the removal of argv[0]
+    --argc;
+    auto foo = ArgumentTokenizer(argv);
+    auto foo2 = foo.GetArgumentTokens();
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
