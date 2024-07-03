@@ -1,8 +1,10 @@
 
-
+#include <iostream>
+#include <fstream>
+#include <string>
 #include "KaleidoscopeJIT.h"
-#include "lexer/token.h"
-#include "lexer/tokenizer.h"
+#include "lexer/token/token.h"
+#include "lexer/token/tokenizer.h"
 #include "lexer/arguments/argument_tokenizer.h"
 #include "lexer/arguments/argument_token.h"
 #include "llvm/ADT/APFloat.h"
@@ -1257,6 +1259,22 @@ int main(int argc, char *argv[])
     --argc;
     auto foo = ArgumentTokenizer(argv);
     auto foo2 = foo.GetArgumentTokens();
+    FILE *file = fopen("test.txt", "r"); // Open the file in read mode
+
+    if (!file)
+    { // Check if the file was opened successfully
+        std::cerr << "Error: Unable to open file" << std::endl;
+        return 1;
+    }
+
+    int ch;
+    while ((ch = getc(file)) != EOF)
+    {
+        std::cout << "hello" << std::endl;
+        std::cout << static_cast<char>(ch) << std::endl; // Print the character
+    }
+
+    fclose(file); // Close the file
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
