@@ -1,0 +1,28 @@
+#ifndef TOKENIZER_H
+#define TOKENIZER_H
+// lexer.h
+#include <string>
+#include "token.h"
+#include "../input/input_stream_reader.h"
+#include <map>
+#include <memory>
+
+// Declare the global variables used by gettok
+extern int CurTok;
+extern std::string IdentifierStr; // Filled in if tok_identifier
+extern double NumVal;             // Filled in if tok_number
+
+class Tokenizer
+{
+private:
+    std::unique_ptr<InputStreamReader> reader;
+    int gettok();
+
+public:
+    Tokenizer(std::unique_ptr<InputStreamReader> reader) : reader(std::move(reader)) {}
+
+    int getNextToken();
+    int GetTokPrecedence(const std::map<char, int> &BinopPrecedence);
+};
+
+#endif // TOKENIZER_H

@@ -32,7 +32,6 @@ inline ArgTokens FromString(const std::string &str)
     {
         return it->second;
     }
-    throw std::invalid_argument("Invalid argument token string");
 }
 
 #endif // TOKEN_H
