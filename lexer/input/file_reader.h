@@ -9,7 +9,6 @@ class FileReader : public InputStreamReader
 {
 private:
     bool validateFile(const char *pathToFileName);
-    char **fileName;
     FILE *file;
 
 public:

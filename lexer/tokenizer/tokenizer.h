@@ -7,11 +7,6 @@
 #include <map>
 #include <memory>
 
-// Declare the global variables used by gettok
-extern int CurTok;
-extern std::string IdentifierStr; // Filled in if tok_identifier
-extern double NumVal;             // Filled in if tok_number
-
 class Tokenizer
 {
 private:

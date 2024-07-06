@@ -16,8 +16,8 @@ Tokenizer static createTokenizer(char *argv[])
     {
         return Tokenizer(std::make_unique<CliReader>());
     }
-
-    return Tokenizer(std::make_unique<FileReader>(&argv[1]));
+    const char *str = argv[1];
+    return Tokenizer(std::make_unique<FileReader>(str));
 }
 
 #endif

@@ -935,7 +935,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     // If this is a binop, find its precedence.
     while (true)
     {
-        int TokPrec = tokenizer->GetTokPrecedence(&BinopPrecedence);
+        int TokPrec = tokenizer->GetTokPrecedence(BinopPrecedence);
 
         // If this is a binop that binds at least as tightly as the current binop,
         // consume it, otherwise we are done.
@@ -952,7 +952,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
             return nullptr;
         // If BinOp binds less tightly with RHS than the operator after RHS, let
         // the pending operator take RHS as its LHS.
-        int NextPrec = tokenizer->GetTokPrecedence(&BinopPrecedence);
+        int NextPrec = tokenizer->GetTokPrecedence(BinopPrecedence);
         if (TokPrec < NextPrec)
         {
             RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
