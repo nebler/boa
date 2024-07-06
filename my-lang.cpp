@@ -1,10 +1,12 @@
 
-
+#include <iostream>
+#include <fstream>
+#include <string>
 #include "KaleidoscopeJIT.h"
-#include "lexer/token.h"
-#include "lexer/tokenizer.h"
-#include "lexer/arguments/argument_tokenizer.h"
-#include "lexer/arguments/argument_token.h"
+#include "lexer/tokenizer/token.h"
+#include "lexer/tokenizer/tokenizer.h"
+#include "lexer/lexer-builder.h"
+
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -66,6 +68,7 @@ static std::unique_ptr<CGSCCAnalysisManager> TheCGAM;
 static std::unique_ptr<ModuleAnalysisManager> TheMAM;
 static std::unique_ptr<PassInstrumentationCallbacks> ThePIC;
 static std::unique_ptr<StandardInstrumentations> TheSI;
+static std::unique_ptr<Tokenizer> tokenizer;
 static ExitOnError ExitOnErr;
 
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
@@ -692,21 +695,21 @@ static std::unique_ptr<ExprAST> ParseExpression();
 static std::unique_ptr<ExprAST> ParseNumberExpr()
 {
     auto Result = std::make_unique<NumberExprAST>(NumVal);
-    getNextToken(); // consume the number
+    tokenizer->getNextToken(); // consume the number
     return std::move(Result);
 }
 
 /// parenexpr ::= '(' expression ')'
 static std::unique_ptr<ExprAST> ParseParenExpr()
 {
-    getNextToken(); // eat (.
+    tokenizer->getNextToken(); // eat (.
     auto V = ParseExpression();
     if (!V)
         return nullptr;
 
     if (CurTok != ')')
         return LogError("expected ')'");
-    getNextToken(); // eat ).
+    tokenizer->getNextToken(); // eat ).
     return V;
 }
 
@@ -717,15 +720,15 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr()
 {
     std::string IdName = IdentifierStr;
 
-    getNextToken(); // eat identifier.
-                    // Simple variable ref.
+    tokenizer->getNextToken(); // eat identifier.
+                               // Simple variable ref.
     if (CurTok != '(')
     {
         return std::make_unique<VariableExprAST>(IdName);
     }
 
     // Call.
-    getNextToken(); // eat (
+    tokenizer->getNextToken(); // eat (
     std::vector<std::unique_ptr<ExprAST>> Args;
     if (CurTok != ')')
     {
@@ -741,12 +744,12 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr()
 
             if (CurTok != ',')
                 return LogError("Expected ')' or ',' in argument list");
-            getNextToken();
+            tokenizer->getNextToken();
         }
     }
 
     // Eat the ')'.
-    getNextToken();
+    tokenizer->getNextToken();
 
     return std::make_unique<CallExprAST>(IdName, std::move(Args));
 }
@@ -754,7 +757,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr()
 /// ifexpr ::= 'if' expression 'then' expression 'else' expression
 static std::unique_ptr<ExprAST> ParseIfExpr()
 {
-    getNextToken(); // eat the if.
+    tokenizer->getNextToken(); // eat the if.
 
     // condition.
     auto Cond = ParseExpression();
@@ -763,7 +766,7 @@ static std::unique_ptr<ExprAST> ParseIfExpr()
 
     if (CurTok != tok_then)
         return LogError("expected then");
-    getNextToken(); // eat the then
+    tokenizer->getNextToken(); // eat the then
 
     auto Then = ParseExpression();
     if (!Then)
@@ -772,7 +775,7 @@ static std::unique_ptr<ExprAST> ParseIfExpr()
     if (CurTok != tok_else)
         return LogError("expected else");
 
-    getNextToken();
+    tokenizer->getNextToken();
 
     auto Else = ParseExpression();
     if (!Else)
@@ -785,24 +788,24 @@ static std::unique_ptr<ExprAST> ParseIfExpr()
 /// forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
 static std::unique_ptr<ExprAST> ParseForExpr()
 {
-    getNextToken(); // eat the for.
+    tokenizer->getNextToken(); // eat the for.
 
     if (CurTok != tok_identifier)
         return LogError("expected identifier after for");
 
     std::string IdName = IdentifierStr;
-    getNextToken(); // eat identifier.
+    tokenizer->getNextToken(); // eat identifier.
 
     if (CurTok != '=')
         return LogError("expected '=' after for");
-    getNextToken(); // eat '='.
+    tokenizer->getNextToken(); // eat '='.
 
     auto Start = ParseExpression();
     if (!Start)
         return nullptr;
     if (CurTok != ',')
         return LogError("expected ',' after for start value");
-    getNextToken();
+    tokenizer->getNextToken();
 
     auto End = ParseExpression();
     if (!End)
@@ -812,7 +815,7 @@ static std::unique_ptr<ExprAST> ParseForExpr()
     std::unique_ptr<ExprAST> Step;
     if (CurTok == ',')
     {
-        getNextToken();
+        tokenizer->getNextToken();
         Step = ParseExpression();
         if (!Step)
             return nullptr;
@@ -820,7 +823,7 @@ static std::unique_ptr<ExprAST> ParseForExpr()
 
     if (CurTok != tok_in)
         return LogError("expected 'in' after for");
-    getNextToken(); // eat 'in'.
+    tokenizer->getNextToken(); // eat 'in'.
 
     auto Body = ParseExpression();
     if (!Body)
@@ -834,7 +837,7 @@ static std::unique_ptr<ExprAST> ParseForExpr()
 //                    (',' identifier ('=' expression)?)* 'in' expression
 static std::unique_ptr<ExprAST> ParseVarExpr()
 {
-    getNextToken(); // eat the var.
+    tokenizer->getNextToken(); // eat the var.
 
     std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
     // At least one variable name is required.
@@ -847,13 +850,13 @@ static std::unique_ptr<ExprAST> ParseVarExpr()
     while (true)
     {
         std::string Name = IdentifierStr;
-        getNextToken(); // eat identifier.
+        tokenizer->getNextToken(); // eat identifier.
 
         // Read the optional initializer.
         std::unique_ptr<ExprAST> Init;
         if (CurTok == '=')
         {
-            getNextToken(); // eat the '='.
+            tokenizer->getNextToken(); // eat the '='.
 
             Init = ParseExpression();
             if (!Init)
@@ -865,14 +868,14 @@ static std::unique_ptr<ExprAST> ParseVarExpr()
         // End of var list, exit loop.
         if (CurTok != ',')
             break;
-        getNextToken(); // eat the ','.
+        tokenizer->getNextToken(); // eat the ','.
 
         if (CurTok != tok_identifier)
             return LogError("expected identifier list after var");
     }
     if (CurTok != tok_in)
         return LogError("expected 'in' keyword after 'var'");
-    getNextToken(); // eat 'in'.
+    tokenizer->getNextToken(); // eat 'in'.
 
     auto Body = ParseExpression();
     if (!Body)
@@ -918,7 +921,7 @@ static std::unique_ptr<ExprAST> ParseUnary()
 
     // If this is a unary operator, read it.
     int Opc = CurTok;
-    getNextToken();
+    tokenizer->getNextToken();
     if (auto Operand = ParseUnary())
         return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
     return nullptr;
@@ -932,7 +935,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     // If this is a binop, find its precedence.
     while (true)
     {
-        int TokPrec = GetTokPrecedence(&BinopPrecedence);
+        int TokPrec = tokenizer->GetTokPrecedence(BinopPrecedence);
 
         // If this is a binop that binds at least as tightly as the current binop,
         // consume it, otherwise we are done.
@@ -941,7 +944,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
 
         // Okay, we know this is a binop.
         int BinOp = CurTok;
-        getNextToken(); // eat binop
+        tokenizer->getNextToken(); // eat binop
 
         // Parse the unary expression after the binary operator.
         auto RHS = ParseUnary();
@@ -949,7 +952,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
             return nullptr;
         // If BinOp binds less tightly with RHS than the operator after RHS, let
         // the pending operator take RHS as its LHS.
-        int NextPrec = GetTokPrecedence(&BinopPrecedence);
+        int NextPrec = tokenizer->GetTokPrecedence(BinopPrecedence);
         if (TokPrec < NextPrec)
         {
             RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
@@ -990,25 +993,25 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
     case tok_identifier:
         FnName = IdentifierStr;
         Kind = 0;
-        getNextToken();
+        tokenizer->getNextToken();
         break;
     case tok_unary:
-        getNextToken();
+        tokenizer->getNextToken();
         if (!isascii(CurTok))
             return LogErrorP("Expected unary operator");
         FnName = "unary";
         FnName += (char)CurTok;
         Kind = 1;
-        getNextToken();
+        tokenizer->getNextToken();
         break;
     case tok_binary:
-        getNextToken();
+        tokenizer->getNextToken();
         if (!isascii(CurTok))
             return LogErrorP("Expected binary operator");
         FnName = "binary";
         FnName += (char)CurTok;
         Kind = 2;
-        getNextToken();
+        tokenizer->getNextToken();
 
         // Read the precedence if present.
         if (CurTok == tok_number)
@@ -1016,7 +1019,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
             if (NumVal < 1 || NumVal > 100)
                 return LogErrorP("Invalid precedence: must be 1..100");
             BinaryPrecedence = (unsigned)NumVal;
-            getNextToken();
+            tokenizer->getNextToken();
         }
         break;
     }
@@ -1025,13 +1028,13 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
         return LogErrorP("Expected '(' in prototype");
 
     std::vector<std::string> ArgNames;
-    while (getNextToken() == tok_identifier)
+    while (tokenizer->getNextToken() == tok_identifier)
         ArgNames.push_back(IdentifierStr);
     if (CurTok != ')')
         return LogErrorP("Expected ')' in prototype");
 
     // success.
-    getNextToken(); // eat ')'.
+    tokenizer->getNextToken(); // eat ')'.
 
     // Verify right number of names for operator.
     if (Kind && ArgNames.size() != Kind)
@@ -1044,7 +1047,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
 /// definition ::= 'def' prototype expression
 static std::unique_ptr<FunctionAST> ParseDefinition()
 {
-    getNextToken(); // eat def.
+    tokenizer->getNextToken(); // eat def.
     std::unique_ptr<PrototypeAST> Proto = ParsePrototype();
     if (!Proto)
         return nullptr;
@@ -1072,7 +1075,7 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
 /// external ::= 'extern' prototype
 static std::unique_ptr<PrototypeAST> ParseExtern()
 {
-    getNextToken(); // eat extern.
+    tokenizer->getNextToken(); // eat extern.
     return ParsePrototype();
 }
 
@@ -1129,7 +1132,7 @@ static void HandleDefinition()
     else
     {
         // Skip token for error recovery.
-        getNextToken();
+        tokenizer->getNextToken();
     }
 }
 
@@ -1153,7 +1156,7 @@ static void HandleExtern()
     {
         printf("no extern");
         // Skip token for error recovery.
-        getNextToken();
+        tokenizer->getNextToken();
     }
 }
 
@@ -1211,7 +1214,7 @@ static void HandleTopLevelExpression()
     else
     {
         // Skip token for error recovery.
-        getNextToken();
+        tokenizer->getNextToken();
     }
 }
 
@@ -1226,7 +1229,7 @@ static void MainLoop()
         case tok_eof:
             return;
         case ';': // ignore top-level semicolons.
-            getNextToken();
+            tokenizer->getNextToken();
             break;
         case tok_def:
             HandleDefinition();
@@ -1247,16 +1250,7 @@ static void MainLoop()
 
 int main(int argc, char *argv[])
 {
-    // Simulate removing argv[0] by shifting elements
-    for (int i = 0; i < argc - 1; ++i)
-    {
-        argv[i] = argv[i + 1];
-    }
-
-    // Decrease argc to reflect the removal of argv[0]
-    --argc;
-    auto foo = ArgumentTokenizer(argv);
-    auto foo2 = foo.GetArgumentTokens();
+    tokenizer = std::make_unique<Tokenizer>(createTokenizer(argv));
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
@@ -1270,7 +1264,7 @@ int main(int argc, char *argv[])
 
     // Prime the first token.
     fprintf(stderr, "ready> ");
-    getNextToken();
+    tokenizer->getNextToken();
     // Make the module, which holds all the code.
     TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
     InitializeModuleAndManagers();

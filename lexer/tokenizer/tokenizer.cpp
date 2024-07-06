@@ -1,25 +1,22 @@
 #include "tokenizer.h"
-#include <string>
-#include <map>
 
-// Declare the global variables used by gettok
+// Define the global variables used by gettok
+int CurTok;
 std::string IdentifierStr; // Filled in if tok_identifier
 double NumVal;             // Filled in if tok_number
-int CurTok;
 
-/// gettok - Return the next token from standard input.
-int gettok()
+int Tokenizer::gettok()
 {
     static int LastChar = ' ';
 
     // Skip any whitespace.
     while (isspace(LastChar))
-        LastChar = getchar();
+        LastChar = this->reader->readInput();
 
     if (isalpha(LastChar))
     { // identifier: [a-zA-Z][a-zA-Z0-9]*
         IdentifierStr = LastChar;
-        while (isalnum((LastChar = getc(stdin))))
+        while (isalnum((LastChar = this->reader->readInput())))
             IdentifierStr += LastChar;
 
         if (IdentifierStr == "def")
@@ -51,7 +48,7 @@ int gettok()
         do
         {
             NumStr += LastChar;
-            LastChar = getchar();
+            LastChar = this->reader->readInput();
         } while (isdigit(LastChar) || LastChar == '.');
 
         NumVal = strtod(NumStr.c_str(), nullptr);
@@ -62,7 +59,7 @@ int gettok()
     {
         // Comment until end of line.
         do
-            LastChar = getchar();
+            LastChar = this->reader->readInput();
         while (LastChar != EOF && LastChar != '\n' && LastChar != '\r');
 
         if (LastChar != EOF)
@@ -73,23 +70,25 @@ int gettok()
     if (LastChar == EOF)
         return tok_eof;
 
-    // Otherwise, just return the character as its ascii value.
+    // Otherwise, just return the character as its ASCII value.
     int ThisChar = LastChar;
-    LastChar = getchar();
+    LastChar = this->reader->readInput();
     return ThisChar;
 }
 
-int getNextToken() { return CurTok = gettok(); }
+int Tokenizer::getNextToken()
+{
+    return CurTok = gettok();
+}
 
-/// GetTokPrecedence - Get the precedence of the pending binary operator token.
-int GetTokPrecedence(std::map<char, int> *BinopPrecedence)
+int Tokenizer::GetTokPrecedence(const std::map<char, int> &BinopPrecedence)
 {
     if (!isascii(CurTok))
         return -1;
 
     // Make sure it's a declared binop.
-    int TokPrec = (*BinopPrecedence)[CurTok];
-    if (TokPrec <= 0)
+    auto it = BinopPrecedence.find(CurTok);
+    if (it == BinopPrecedence.end())
         return -1;
-    return TokPrec;
+    return it->second;
 }
