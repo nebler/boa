@@ -15,8 +15,10 @@ Ideas/Next step:
 
 Refactorings:
 
-- Move the ast into it's own files and use the visitor pattern in order to clean up the code
+- Move the ast into it's own files
+  - the original tutorial https://llvm.org/docs/tutorial/MyFirstLanguageFrontend/LangImpl03.html#code-generation-setup suggested to maybe use the visitor pattern. I am not too fond of this idea but i still wanna put them in their own files and encapsulate them a little better.
 - Encapsulate some of the initalization code
+- Encapsulate some of the parsing code
 
 Features:
 
@@ -26,6 +28,7 @@ Features:
 - Eror Handling
 - Parallel Computing
 - Async Programming
+- Debugging Options
 
 Infrastructure:
 

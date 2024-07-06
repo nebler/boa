@@ -126,8 +126,6 @@ public:
 
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 
-
-
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST
 {
