@@ -6,6 +6,7 @@
 #include "lexer/tokenizer/token.h"
 #include "lexer/tokenizer/tokenizer.h"
 #include "lexer/lexer-builder.h"
+#include "ast/expr_ast.h"
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
@@ -125,14 +126,7 @@ public:
 
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 
-class ExprAST
-{
-public:
-    virtual ~ExprAST() = default;
-    // C++ syntax =0 means no default implementation and subclasses have to implement it.
-    // Value represents a SSA
-    virtual llvm::Value *codegen() = 0;
-};
+
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST
