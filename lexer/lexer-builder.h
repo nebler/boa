@@ -8,15 +8,22 @@
 #include "input/file_reader.h"
 #include "input/cli_reader.h"
 #include <memory>
+#include <iostream>
 
 Tokenizer static createTokenizer(char *argv[])
 {
-    vector<ArgTokens> foo = ArgumentTokenizer(argv).GetArgumentTokens();
-    if (std::find(foo.begin(), foo.end(), cli_mode) != foo.end())
+    vector<ArgTokens> tokens = ArgumentTokenizer(argv).GetArgumentTokens();
+    for (const ArgTokens &token : tokens)
     {
-        return Tokenizer(std::make_unique<CliReader>());
+        if (token == cli_mode)
+        {
+            std::cout << "if clause" << std::endl;
+            return Tokenizer(std::make_unique<CliReader>());
+        }
     }
     const char *str = argv[1];
+    std::cout << "string is" << std::endl;
+    std::cout << str << std::endl;
     return Tokenizer(std::make_unique<FileReader>(str));
 }
 

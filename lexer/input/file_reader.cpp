@@ -1,6 +1,7 @@
 #include "file_reader.h"
 char FileReader::readInput()
 {
+
     return getc(this->file);
 }
 
