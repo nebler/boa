@@ -1,6 +1,7 @@
 // token.h
 #ifndef ARGUMENT_TOKEN_H
 #define ARGUMENT_TOKEN_H
+#include <optional>
 enum ArgTokens
 {
     cli_mode = 1
@@ -20,7 +21,7 @@ inline std::string ToString(ArgTokens token)
 }
 
 // Function to get the enum value from a string representation
-inline ArgTokens FromString(const std::string &str)
+inline std::optional<ArgTokens> FromString(const std::string &str)
 {
     static const std::unordered_map<std::string, ArgTokens> token_map = {
         {"-i", cli_mode},
@@ -31,6 +32,10 @@ inline ArgTokens FromString(const std::string &str)
     if (it != token_map.end())
     {
         return it->second;
+    }
+    else
+    {
+        return std::nullopt;
     }
 }
 

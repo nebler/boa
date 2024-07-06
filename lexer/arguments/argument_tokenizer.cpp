@@ -2,6 +2,7 @@
 #include <map>
 #include <vector>
 #include <iostream>
+#include <optional>
 #include "argument_token.h"
 
 using namespace std;
@@ -26,8 +27,11 @@ vector<ArgTokens> ArgumentTokenizer::GetArgumentTokens()
         std::string arg_str = argv[i];
         try
         {
-            ArgTokens token = FromString(arg_str);
-            tokens.push_back(token);
+            auto token = FromString(arg_str);
+            if (token.has_value())
+            {
+                tokens.push_back(token.value());
+            }
         }
         catch (const std::invalid_argument &e)
         {

@@ -17,13 +17,11 @@ Tokenizer static createTokenizer(char *argv[])
     {
         if (token == cli_mode)
         {
-            std::cout << "if clause" << std::endl;
+            std::cout << "CLI Mode" << std::endl;
             return Tokenizer(std::make_unique<CliReader>());
         }
     }
     const char *str = argv[1];
-    std::cout << "string is" << std::endl;
-    std::cout << str << std::endl;
     return Tokenizer(std::make_unique<FileReader>(str));
 }
 
