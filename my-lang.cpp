@@ -48,7 +48,6 @@
 
 using namespace llvm;
 using namespace orc;
-
 Value *LogErrorV(const char *Str);
 /// BinopPrecedence - This holds the precedence for each binary operator that is
 /// defined.
@@ -88,6 +87,8 @@ public:
 
     unsigned getBinaryPrecedence() const { return Precedence; }
 };
+
+static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST

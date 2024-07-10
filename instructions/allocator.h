@@ -1,6 +1,9 @@
 #ifndef ALLOCATOR_H
 #define ALLOCATOR_H
 
+#include "../context/context-manager.h"
+using namespace llvm;
+
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
 /// the function.  This is used for mutable variables etc.
 // todo: make this code more readable because like wtf
