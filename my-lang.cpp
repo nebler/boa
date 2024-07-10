@@ -7,6 +7,7 @@
 #include "lexer/tokenizer/tokenizer.h"
 #include "lexer/lexer-builder.h"
 #include "ast/expr_ast.h"
+#include "instructions/allocator.h"
 #include "context/context-manager.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
@@ -53,23 +54,6 @@ Value *LogErrorV(const char *Str);
 /// defined.
 static std::map<char, int> BinopPrecedence;
 
-/// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
-/// the function.  This is used for mutable variables etc.
-// todo: make this code more readable because like wtf
-static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
-                                          const std::string &VarName)
-{
-
-    // creates an IRBuilder object at the first instrcution of the entry block
-    IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
-                     TheFunction->getEntryBlock().begin());
-
-    // create alloca with the expected name and return it
-    return TmpB.CreateAlloca(Type::getDoubleTy(*TheContext), nullptr,
-                             VarName);
-}
-/// ExprAST - Base class for all expression nodes.
-
 /// PrototypeAST - This class represents the "prototype" for a function,
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes).
@@ -104,8 +88,6 @@ public:
 
     unsigned getBinaryPrecedence() const { return Precedence; }
 };
-
-static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST
