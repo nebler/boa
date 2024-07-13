@@ -57,8 +57,8 @@ static std::map<char, int> BinopPrecedence;
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes).
 // A prototype talks aber the external interface for a functionnot the value
-// computed by an expression this is also why it does not return a llvm value
-// but instead returns a llvm function
+// computed by an expression this is also why it does return a llvm value but
+// instead returns a llvm function
 
 // Basically, in addition to knowing a name for the prototype, we now keep track
 // of whether it was an operator, and if it was, what precedence level the
@@ -97,6 +97,21 @@ public:
 };
 
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+
+class StructAST
+{
+  std::string Name;
+  std::vector<StructAST> Fields;
+
+public:
+  StructAST(const std::string& Name, std::vector<StructAST> Fields)
+      : Name(Name)
+      , Fields(std::move(Fields))
+  {
+  }
+  Function* codegen();
+  const std::string& getName() const { return Name; }
+};
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST
@@ -358,7 +373,7 @@ Function* getFunction(std::string Name)
 Value* BinaryExprAST::codegen()
 {
   // Special case '=' because we don't want to emit the LHS as an expression.
-  // It does not follow the emit LHS, emit RHS do computiation model
+  // It doesnt follow the emit LHS, emit RHS do computiation model
   if (Op == '=') {
     // Assignment requires the LHS to be an identifier.
     // This assume we're building without RTTI because LLVM builds that way by
@@ -960,6 +975,15 @@ static std::unique_ptr<ExprAST> ParseExpression()
   return ParseBinOpRHS(0, std::move(LHS));
 }
 
+static std::unique_ptr<StructAST> ParseStruct()
+{
+  int name = tokenizer->getNextToken();
+  std::cout << name << std::endl;
+  std::cout << IdentifierStr << std::endl;
+
+  return nullptr;
+}
+
 /// prototype
 ///   ::= id '(' id* ')'
 static std::unique_ptr<PrototypeAST> ParsePrototype()
@@ -1092,6 +1116,12 @@ static void HandleExtern()
   }
 }
 
+static void HandleStruct()
+{
+  std::cout << "Handling Struct" << std::endl;
+  auto foo = ParseStruct();
+}
+
 #ifdef _WIN32
 #  define DLLEXPORT __declspec(dllexport)
 #else
@@ -1165,6 +1195,9 @@ static void MainLoop()
       case tok_extern:
         HandleExtern();
         break;
+      case tok_strcut:
+        HandleStruct();
+        break;
       default:
         HandleTopLevelExpression();
         break;
@@ -1189,7 +1222,7 @@ int main(int argc, char* argv[])
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
   BinopPrecedence['*'] = 40;  // highest.
-
+  std::cout << "foo" << std::endl;
   // Prime the first token.
   fprintf(stderr, "ready> ");
   tokenizer->getNextToken();

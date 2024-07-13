@@ -27,7 +27,8 @@ enum Token
 
   // operators
   tok_binary = -11,
-  tok_unary = -12
+  tok_unary = -12,
+  tok_strcut = -13
 };
 
 #endif  // TOKEN_H
