@@ -57,8 +57,8 @@ static std::map<char, int> BinopPrecedence;
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes).
 // A prototype talks aber the external interface for a functionnot the value
-// computed by an expression this is also why it doesnt return a llvm value but
-// instead returns a llvm function
+// computed by an expression this is also why it does not return a llvm value
+// but instead returns a llvm function
 
 // Basically, in addition to knowing a name for the prototype, we now keep track
 // of whether it was an operator, and if it was, what precedence level the
@@ -122,7 +122,7 @@ Value* NumberExprAST::codegen()
 class VariableExprAST : public ExprAST
 {
   std::string Name;
-  // have to impement it
+  // have to implement it
   Value* codegen();
 
 public:
@@ -291,7 +291,7 @@ Value* IfExprAST::codegen()
     return nullptr;
 
   // Convert condition to a bool by comparing non-equal to 0.0.
-  // we dont have actual bools just 0 and 1
+  // we don't have actual bools just 0 and 1
   CondV = Builder->CreateFCmpONE(
       CondV, ConstantFP::get(*TheContext, APFloat(0.0)), "ifcond");
 
@@ -358,7 +358,7 @@ Function* getFunction(std::string Name)
 Value* BinaryExprAST::codegen()
 {
   // Special case '=' because we don't want to emit the LHS as an expression.
-  // It doesnt follow the emit LHS, emit RHS do computiation model
+  // It does not follow the emit LHS, emit RHS do computiation model
   if (Op == '=') {
     // Assignment requires the LHS to be an identifier.
     // This assume we're building without RTTI because LLVM builds that way by
@@ -433,7 +433,7 @@ Value* CallExprAST::codegen()
   // Look up the name in the global module table.
   Function* CalleeF = getFunction(Callee);
   if (!CalleeF) {
-    return LogErrorV("Unknown funciton refeenced");
+    return LogErrorV("Unknown function refeenced");
   }
 
   // if there is argument mismatch error

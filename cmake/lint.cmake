@@ -28,9 +28,20 @@ set(output "")
 string(LENGTH "${CMAKE_SOURCE_DIR}/" path_prefix_length)
 
 foreach(file IN LISTS files)
+  # Print debug information
+  message(STATUS "Checking file: ${file}")
+
+  # Check if file exists
+  if(NOT EXISTS "${file}")
+    message(FATAL_ERROR "File not found: ${file}")
+  endif()
+
+  # Execute clang-format
+  message("${CMAKE_SOURCE_DIR}")
+  message("${file}")
+  message( ${args})
   execute_process(
-      COMMAND "${FORMAT_COMMAND}" --style=file "${flag}" "${file}"
-      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+      COMMAND "${FORMAT_COMMAND}" --style=file "${file}"
       RESULT_VARIABLE result
       ${args}
   )
@@ -41,9 +52,12 @@ foreach(file IN LISTS files)
     string(SUBSTRING "${file}" "${path_prefix_length}" -1 relative_file)
     list(APPEND badly_formatted "${relative_file}")
   endif()
+
+  # Clear output for next iteration
   set(output "")
 endforeach()
 
+# Report badly formatted files
 if(NOT badly_formatted STREQUAL "")
   list(JOIN badly_formatted "\n" bad_list)
   message("The following files are badly formatted:\n\n${bad_list}\n")

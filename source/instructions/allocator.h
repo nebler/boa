@@ -11,7 +11,7 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
                                           const std::string &VarName)
 {
 
-    // creates an IRBuilder object at the first instrcution of the entry block
+    // creates an IRBuilder object at the first instruction of the entry block
     IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
                      TheFunction->getEntryBlock().begin());
 
