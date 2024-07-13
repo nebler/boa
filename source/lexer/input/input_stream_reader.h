@@ -4,8 +4,8 @@
 class InputStreamReader
 {
 public:
-    virtual char readInput() = 0;
-    virtual ~InputStreamReader() = default;
+  virtual char readInput() = 0;
+  virtual ~InputStreamReader() = default;
 };
 
 #endif
