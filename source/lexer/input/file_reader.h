@@ -5,8 +5,6 @@
 #include <iostream>
 #include <string>
 
-#include <studio.h>
-
 #include "input_stream_reader.h"
 class FileReader : public InputStreamReader
 {

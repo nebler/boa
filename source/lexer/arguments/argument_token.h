@@ -22,7 +22,7 @@ inline std::string ToString(ArgTokens token)
 // Function to get the enum value from a string representation
 inline std::optional<ArgTokens> FromString(const std::string& str)
 {
-  static const std::unordered_map<std::string, ArgTokens> token_map = {
+  static const std::map<std::string, ArgTokens> token_map = {
       {"-i", cli_mode},
       // Add more mappings as needed
   };
