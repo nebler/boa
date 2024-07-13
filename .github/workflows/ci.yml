@@ -29,7 +29,7 @@ jobs:
         if: always()
         run: cmake -P cmake/spell.cmake
 
-  build:
+  coverage:
     needs: [lint]
 
     runs-on: ubuntu-22.04
@@ -58,6 +58,9 @@ jobs:
         working-directory: build/coverage
         run: ctest --output-on-failure --no-tests=error -j 2
 
+      - name: Process coverage info
+        run: cmake --build build/coverage -t coverage
+
   sanitize:
     needs: [lint]
 
@@ -67,6 +70,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake --preset=ci-sanitize
 
       - name: Build
         run: cmake --build build/sanitize -j 2
