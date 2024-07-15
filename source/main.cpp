@@ -13,6 +13,11 @@
 #include <utility>
 #include <vector>
 
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Type.h>
+
 #include "KaleidoscopeJIT.h"
 #include "ast/expressions/expr_ast.h"
 #include "context/context-manager.h"
@@ -57,8 +62,8 @@ static std::map<char, int> BinopPrecedence;
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes).
 // A prototype talks aber the external interface for a functionnot the value
-// computed by an expression this is also why it does not return a llvm value
-// but instead returns a llvm function
+// computed by an expression this is also why it does return a llvm value but
+// instead returns a llvm function
 
 // Basically, in addition to knowing a name for the prototype, we now keep track
 // of whether it was an operator, and if it was, what precedence level the
@@ -97,6 +102,21 @@ public:
 };
 
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+
+class StructAST
+{
+  std::string Name;
+  std::vector<StructAST> Fields;
+
+public:
+  StructAST(const std::string& Name, std::vector<StructAST> Fields)
+      : Name(Name)
+      , Fields(std::move(Fields))
+  {
+  }
+  Function* codegen();
+  const std::string& getName() const { return Name; }
+};
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST
@@ -960,6 +980,97 @@ static std::unique_ptr<ExprAST> ParseExpression()
   return ParseBinOpRHS(0, std::move(LHS));
 }
 
+// Dummy ParseType function to demonstrate the functionality
+llvm::Type* ParseType()
+{
+  int tok = tokenizer->getNextToken();
+  std::cout << tok << std::endl;
+  if (tok == tok_int) {
+    return llvm::Type::getInt32Ty(*TheContext);
+  } else if (tok == tok_float) {
+    return llvm::Type::getFloatTy(*TheContext);
+  }
+  return nullptr;
+}
+
+/*
+struct User {
+    active bool,
+    username String,
+    email String,
+    sign_in_count u64,
+    foo Another
+}
+*/
+// Function to parse the struct and create LLVM IR
+static std::unique_ptr<llvm::StructType> ParseStruct()
+{
+  // struct has already been parsed before
+  tokenizer->getNextToken();  // get the struct name
+  std::cout << IdentifierStr << std::endl;
+
+  llvm::StringRef Name(IdentifierStr);
+  llvm::StructType* structType = llvm::StructType::create(*TheContext, Name);
+
+  tokenizer->getNextToken();  // eat the '{'
+
+  std::vector<llvm::Type*> structMembers;
+
+  tokenizer->getNextToken();
+
+  if (CurTok == '}') {
+    std::cout << "empty  struct" << std::endl;
+    structType->print(llvm::outs());
+    TheModule->print(llvm::outs(), nullptr);
+    std::cout << "ayo" << std::endl;
+    return std::unique_ptr<llvm::StructType>(structType);
+  }
+
+  while (true) {
+    // Parse the member type and name, assume we have a function `ParseType`
+    // that returns an LLVM type
+    // Parse the member name
+
+    if (CurTok != tok_identifier)
+    {  // Assuming TokenIdentifier is the token type for identifiers
+      std::cout << CurTok << std::endl;
+      std::cerr << "Error: expected member name!" << std::endl;
+      return nullptr;
+    }
+    std::string memberName = IdentifierStr;
+    std::cout << memberName << std::endl;
+
+    llvm::Type* memberType = ParseType();
+    if (!memberType) {
+      std::cerr << "Error: unknown type!" << IdentifierStr << std::endl;
+      return nullptr;
+    }
+    structMembers.push_back(memberType);
+    tokenizer->getNextToken();
+    if (CurTok != ',') {
+      std::cout << "wooop" << std::endl;
+      break;
+    } else {
+      std::cout << CurTok << std::endl;
+      tokenizer->getNextToken();
+      std::cout << IdentifierStr << std::endl;
+      std::cout << CurTok << std::endl;
+    }
+  }
+  std::cout << "what the fuck is going on22" << std::endl;
+
+  if (CurTok == '}') {
+    std::cout << "what the fuck is going on" << std::endl;
+    structType->setBody(structMembers);
+    structType->print(llvm::outs());
+    TheModule->print(llvm::outs(), nullptr);
+    std::cout << "ayo" << std::endl;
+    return std::unique_ptr<llvm::StructType>(structType);
+  } else {
+    std::cerr << "Something went wrong I was expecting a }" << std::endl;
+  }
+}
+
 /// prototype
 ///   ::= id '(' id* ')'
 static std::unique_ptr<PrototypeAST> ParsePrototype()
@@ -1092,6 +1203,12 @@ static void HandleExtern()
   }
 }
 
+static void HandleStruct()
+{
+  std::cout << "Handling Struct" << std::endl;
+  auto foo = ParseStruct();
+}
+
 #ifdef _WIN32
 #  define DLLEXPORT __declspec(dllexport)
 #else
@@ -1165,6 +1282,9 @@ static void MainLoop()
       case tok_extern:
         HandleExtern();
         break;
+      case tok_strcut:
+        HandleStruct();
+        break;
       default:
         HandleTopLevelExpression();
         break;
@@ -1189,7 +1309,7 @@ int main(int argc, char* argv[])
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
   BinopPrecedence['*'] = 40;  // highest.
-
+  std::cout << "foo" << std::endl;
   // Prime the first token.
   fprintf(stderr, "ready> ");
   tokenizer->getNextToken();
