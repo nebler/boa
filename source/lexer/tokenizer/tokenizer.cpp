@@ -38,6 +38,12 @@ int Tokenizer::gettok()
       return tok_unary;
     if (IdentifierStr == "var")
       return tok_var;
+    if (IdentifierStr == "int") {
+      std::cout << "int" << std::endl;
+      return tok_int;
+    }
+    if (IdentifierStr == "float")
+      return tok_float;
     if (IdentifierStr == "struct") {
       std::cout << "struct" << std::endl;
       return tok_strcut;

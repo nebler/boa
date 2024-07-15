@@ -13,6 +13,11 @@
 #include <utility>
 #include <vector>
 
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Type.h>
+
 #include "KaleidoscopeJIT.h"
 #include "ast/expressions/expr_ast.h"
 #include "context/context-manager.h"
@@ -373,7 +378,7 @@ Function* getFunction(std::string Name)
 Value* BinaryExprAST::codegen()
 {
   // Special case '=' because we don't want to emit the LHS as an expression.
-  // It doesnt follow the emit LHS, emit RHS do computiation model
+  // It does not follow the emit LHS, emit RHS do computiation model
   if (Op == '=') {
     // Assignment requires the LHS to be an identifier.
     // This assume we're building without RTTI because LLVM builds that way by
@@ -975,13 +980,95 @@ static std::unique_ptr<ExprAST> ParseExpression()
   return ParseBinOpRHS(0, std::move(LHS));
 }
 
-static std::unique_ptr<StructAST> ParseStruct()
+// Dummy ParseType function to demonstrate the functionality
+llvm::Type* ParseType()
 {
-  int name = tokenizer->getNextToken();
-  std::cout << name << std::endl;
+  int tok = tokenizer->getNextToken();
+  std::cout << tok << std::endl;
+  if (tok == tok_int) {
+    return llvm::Type::getInt32Ty(*TheContext);
+  } else if (tok == tok_float) {
+    return llvm::Type::getFloatTy(*TheContext);
+  }
+  return nullptr;
+}
+
+/*
+struct User {
+    active bool,
+    username String,
+    email String,
+    sign_in_count u64,
+    foo Another
+}
+*/
+// Function to parse the struct and create LLVM IR
+static std::unique_ptr<llvm::StructType> ParseStruct()
+{
+  // struct has already been parsed before
+  tokenizer->getNextToken();  // get the struct name
   std::cout << IdentifierStr << std::endl;
 
-  return nullptr;
+  llvm::StringRef Name(IdentifierStr);
+  llvm::StructType* structType = llvm::StructType::create(*TheContext, Name);
+
+  tokenizer->getNextToken();  // eat the '{'
+
+  std::vector<llvm::Type*> structMembers;
+
+  tokenizer->getNextToken();
+
+  if (CurTok == '}') {
+    std::cout << "empty  struct" << std::endl;
+    structType->print(llvm::outs());
+    TheModule->print(llvm::outs(), nullptr);
+    std::cout << "ayo" << std::endl;
+    return std::unique_ptr<llvm::StructType>(structType);
+  }
+
+  while (true) {
+    // Parse the member type and name, assume we have a function `ParseType`
+    // that returns an LLVM type
+    // Parse the member name
+
+    if (CurTok != tok_identifier)
+    {  // Assuming TokenIdentifier is the token type for identifiers
+      std::cout << CurTok << std::endl;
+      std::cerr << "Error: expected member name!" << std::endl;
+      return nullptr;
+    }
+    std::string memberName = IdentifierStr;
+    std::cout << memberName << std::endl;
+
+    llvm::Type* memberType = ParseType();
+    if (!memberType) {
+      std::cerr << "Error: unknown type!" << IdentifierStr << std::endl;
+      return nullptr;
+    }
+    structMembers.push_back(memberType);
+    tokenizer->getNextToken();
+    if (CurTok != ',') {
+      std::cout << "wooop" << std::endl;
+      break;
+    } else {
+      std::cout << CurTok << std::endl;
+      tokenizer->getNextToken();
+      std::cout << IdentifierStr << std::endl;
+      std::cout << CurTok << std::endl;
+    }
+  }
+  std::cout << "what the fuck is going on22" << std::endl;
+
+  if (CurTok == '}') {
+    std::cout << "what the fuck is going on" << std::endl;
+    structType->setBody(structMembers);
+    structType->print(llvm::outs());
+    TheModule->print(llvm::outs(), nullptr);
+    std::cout << "ayo" << std::endl;
+    return std::unique_ptr<llvm::StructType>(structType);
+  } else {
+    std::cerr << "Something went wrong I was expecting a }" << std::endl;
+  }
 }
 
 /// prototype
