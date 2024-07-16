@@ -1065,7 +1065,9 @@ static std::unique_ptr<llvm::StructType> ParseStruct()
     structType->print(llvm::outs());
     TheModule->print(llvm::outs(), nullptr);
     std::cout << "ayo" << std::endl;
+    tokenizer->getNextToken();
     return std::unique_ptr<llvm::StructType>(structType);
+
   } else {
     std::cerr << "Something went wrong I was expecting a }" << std::endl;
   }
