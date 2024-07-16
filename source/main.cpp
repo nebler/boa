@@ -102,6 +102,7 @@ public:
 };
 
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+static std::map<std::string, llvm::StructType*> DefinedStructs;
 
 class StructAST
 {
@@ -845,6 +846,7 @@ static std::unique_ptr<ExprAST> ParseForExpr()
 //                    (',' identifier ('=' expression)?)* 'in' expression
 static std::unique_ptr<ExprAST> ParseVarExpr()
 {
+  std::cout << "parsing var" << std::endl;
   tokenizer->getNextToken();  // eat the var.
 
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
@@ -990,6 +992,15 @@ llvm::Type* ParseType()
   } else if (tok == tok_float) {
     return llvm::Type::getFloatTy(*TheContext);
   }
+
+  auto it = DefinedStructs.find(IdentifierStr);
+  if (it != DefinedStructs.end()) {
+    return it->second;
+  } else {
+    std::cerr << "Error: Struct " << IdentifierStr << " not defined!"
+              << std::endl;
+    return nullptr;
+  }
   return nullptr;
 }
 
@@ -1008,7 +1019,11 @@ static std::unique_ptr<llvm::StructType> ParseStruct()
   // struct has already been parsed before
   tokenizer->getNextToken();  // get the struct name
   std::cout << IdentifierStr << std::endl;
-
+  auto it = DefinedStructs.find(IdentifierStr);
+  if (it != DefinedStructs.end()) {
+    std::cerr << "Hey you have already defined a struct with this name:"
+              << IdentifierStr << std::endl;
+  }
   llvm::StringRef Name(IdentifierStr);
   llvm::StructType* structType = llvm::StructType::create(*TheContext, Name);
 
@@ -1023,6 +1038,7 @@ static std::unique_ptr<llvm::StructType> ParseStruct()
     structType->print(llvm::outs());
     TheModule->print(llvm::outs(), nullptr);
     std::cout << "ayo" << std::endl;
+    tokenizer->getNextToken();
     return std::unique_ptr<llvm::StructType>(structType);
   }
 
@@ -1060,11 +1076,13 @@ static std::unique_ptr<llvm::StructType> ParseStruct()
   std::cout << "what the fuck is going on22" << std::endl;
 
   if (CurTok == '}') {
-    std::cout << "what the fuck is going on" << std::endl;
+    std::cout << "Hello this is the current token: " << CurTok << std::endl;
     structType->setBody(structMembers);
     structType->print(llvm::outs());
     TheModule->print(llvm::outs(), nullptr);
-    std::cout << "ayo" << std::endl;
+    DefinedStructs[IdentifierStr] =
+        structType;  // Store the struct with its members
+
     return std::unique_ptr<llvm::StructType>(structType);
   } else {
     std::cerr << "Something went wrong I was expecting a }" << std::endl;
@@ -1170,6 +1188,7 @@ static std::unique_ptr<PrototypeAST> ParseExtern()
 
 static void HandleDefinition()
 {
+  std::cout << "Handle Definition" << std::endl;
   if (auto FnAST = ParseDefinition()) {
     if (auto* FnIR = FnAST->codegen()) {
       fprintf(stderr, "Read function definition:");
@@ -1187,6 +1206,7 @@ static void HandleDefinition()
 
 static void HandleExtern()
 {
+  std::cout << "Handle Extern" << std::endl;
   if (auto ProtoAST = ParseExtern()) {
     if (auto* FnIR = ProtoAST->codegen()) {
       fprintf(stderr, "Read extern: ");
@@ -1207,6 +1227,7 @@ static void HandleStruct()
 {
   std::cout << "Handling Struct" << std::endl;
   auto foo = ParseStruct();
+  std::cout << "We handled a struct" << std::endl;
 }
 
 #ifdef _WIN32
@@ -1269,9 +1290,11 @@ static void HandleTopLevelExpression()
 static void MainLoop()
 {
   while (true) {
+    tokenizer->getNextToken();
     fprintf(stderr, "ready> ");
     switch (CurTok) {
       case tok_eof:
+        std::cout << "End of File" << std::endl;
         return;
       case ';':  // ignore top-level semicolons.
         tokenizer->getNextToken();
@@ -1284,6 +1307,7 @@ static void MainLoop()
         break;
       case tok_strcut:
         HandleStruct();
+        std::cout << "We handled a struct" << std::endl;
         break;
       default:
         HandleTopLevelExpression();
@@ -1312,7 +1336,6 @@ int main(int argc, char* argv[])
   std::cout << "foo" << std::endl;
   // Prime the first token.
   fprintf(stderr, "ready> ");
-  tokenizer->getNextToken();
   // Make the module, which holds all the code.
   // todo: check the Create Method and understand the expected type
   // is it similar to rust type?
