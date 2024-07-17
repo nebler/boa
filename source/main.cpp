@@ -980,15 +980,23 @@ static std::unique_ptr<ExprAST> ParseExpression()
   return ParseBinOpRHS(0, std::move(LHS));
 }
 
+static std::map<std::string, llvm::StructType*> DefinedStructs;
+static std::map<std::string, llvm::Type*> DefinedTypes;
+static void PopulateTypes()
+{
+  DefinedTypes["int"] = llvm::Type::getInt32Ty(*TheContext);
+  DefinedTypes["float"] = llvm::Type::getFloatTy(*TheContext);
+}
+
 // Dummy ParseType function to demonstrate the functionality
 llvm::Type* ParseType()
 {
   int tok = tokenizer->getNextToken();
   std::cout << tok << std::endl;
   if (tok == tok_int) {
-    return llvm::Type::getInt32Ty(*TheContext);
+    return DefinedTypes["int"];
   } else if (tok == tok_float) {
-    return llvm::Type::getFloatTy(*TheContext);
+    return DefinedTypes["float"];
   }
   return nullptr;
 }
@@ -1003,7 +1011,7 @@ struct User {
 }
 */
 // Function to parse the struct and create LLVM IR
-static std::unique_ptr<llvm::StructType> ParseStruct()
+static llvm::StructType* ParseStruct()
 {
   // struct has already been parsed before
   tokenizer->getNextToken();  // get the struct name
@@ -1023,7 +1031,7 @@ static std::unique_ptr<llvm::StructType> ParseStruct()
     structType->print(llvm::outs());
     TheModule->print(llvm::outs(), nullptr);
     std::cout << "ayo" << std::endl;
-    return std::unique_ptr<llvm::StructType>(structType);
+    return structType;
   }
 
   while (true) {
@@ -1066,7 +1074,7 @@ static std::unique_ptr<llvm::StructType> ParseStruct()
     TheModule->print(llvm::outs(), nullptr);
     std::cout << "ayo" << std::endl;
     tokenizer->getNextToken();
-    return std::unique_ptr<llvm::StructType>(structType);
+    return structType;
 
   } else {
     std::cerr << "Something went wrong I was expecting a }" << std::endl;
@@ -1313,6 +1321,7 @@ int main(int argc, char* argv[])
   BinopPrecedence['*'] = 40;  // highest.
   std::cout << "foo" << std::endl;
   // Prime the first token.
+  PopulateTypes();
   fprintf(stderr, "ready> ");
   tokenizer->getNextToken();
   // Make the module, which holds all the code.

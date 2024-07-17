@@ -1,0 +1,41 @@
+struct foo {
+    test int
+}
+
+struct foo2 {
+    test int
+}
+
+struct foo3 {
+    test int
+}
+
+struct foo4 {
+    test int
+}
+
+
+struct foo5 {
+    test int
+}
+
+struct foo6 {
+    test int
+}
+
+struct foo7 {
+    test int
+}
+
+struct foo8 {
+    test int
+}
+
+struct foo9 {
+    test int
+}
+
+struct foo10 {
+    test int
+}
+
