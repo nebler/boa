@@ -1,0 +1,12 @@
+struct foo {
+    test int
+}
+
+struct foofer {
+    hehe foo
+}
+
+struct fooferfer {
+    hehe foofer,
+    test foo
+}

@@ -992,13 +992,17 @@ static void PopulateTypes()
 llvm::Type* ParseType()
 {
   int tok = tokenizer->getNextToken();
-  std::cout << tok << std::endl;
   if (tok == tok_int) {
     return DefinedTypes["int"];
   } else if (tok == tok_float) {
     return DefinedTypes["float"];
   }
-  return nullptr;
+  auto it = DefinedTypes[IdentifierStr];
+  if (it != nullptr) {
+    return it;
+  } else {
+    return nullptr;
+  }
 }
 
 /*
@@ -1015,7 +1019,6 @@ static llvm::StructType* ParseStruct()
 {
   // struct has already been parsed before
   tokenizer->getNextToken();  // get the struct name
-  std::cout << IdentifierStr << std::endl;
 
   llvm::StringRef Name(IdentifierStr);
   llvm::StructType* structType = llvm::StructType::create(*TheContext, Name);
@@ -1027,10 +1030,8 @@ static llvm::StructType* ParseStruct()
   tokenizer->getNextToken();
 
   if (CurTok == '}') {
-    std::cout << "empty  struct" << std::endl;
     structType->print(llvm::outs());
     TheModule->print(llvm::outs(), nullptr);
-    std::cout << "ayo" << std::endl;
     return structType;
   }
 
@@ -1041,39 +1042,32 @@ static llvm::StructType* ParseStruct()
 
     if (CurTok != tok_identifier)
     {  // Assuming TokenIdentifier is the token type for identifiers
-      std::cout << CurTok << std::endl;
       std::cerr << "Error: expected member name!" << std::endl;
       return nullptr;
     }
     std::string memberName = IdentifierStr;
-    std::cout << memberName << std::endl;
 
     llvm::Type* memberType = ParseType();
     if (!memberType) {
-      std::cerr << "Error: unknown type!" << IdentifierStr << std::endl;
+      std::cerr << "Error: unknown type " << IdentifierStr << std::endl;
       return nullptr;
     }
     structMembers.push_back(memberType);
     tokenizer->getNextToken();
     if (CurTok != ',') {
-      std::cout << "wooop" << std::endl;
       break;
     } else {
-      std::cout << CurTok << std::endl;
       tokenizer->getNextToken();
-      std::cout << IdentifierStr << std::endl;
-      std::cout << CurTok << std::endl;
     }
   }
-  std::cout << "what the fuck is going on22" << std::endl;
 
   if (CurTok == '}') {
-    std::cout << "what the fuck is going on" << std::endl;
     structType->setBody(structMembers);
     structType->print(llvm::outs());
     TheModule->print(llvm::outs(), nullptr);
     std::cout << "ayo" << std::endl;
     tokenizer->getNextToken();
+    DefinedTypes[structType->getName().str()] = structType;
     return structType;
 
   } else {
@@ -1215,7 +1209,6 @@ static void HandleExtern()
 
 static void HandleStruct()
 {
-  std::cout << "Handling Struct" << std::endl;
   auto foo = ParseStruct();
 }
 
@@ -1319,7 +1312,6 @@ int main(int argc, char* argv[])
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
   BinopPrecedence['*'] = 40;  // highest.
-  std::cout << "foo" << std::endl;
   // Prime the first token.
   PopulateTypes();
   fprintf(stderr, "ready> ");
