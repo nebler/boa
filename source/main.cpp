@@ -106,10 +106,10 @@ static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 class StructAST
 {
   std::string Name;
-  std::vector<StructAST> Fields;
+  std::vector<std::string> Fields;
 
 public:
-  StructAST(const std::string& Name, std::vector<StructAST> Fields)
+  StructAST(const std::string& Name, std::vector<std::string> Fields)
       : Name(Name)
       , Fields(std::move(Fields))
   {
@@ -1210,6 +1210,7 @@ static void HandleExtern()
 static void HandleStruct()
 {
   auto foo = ParseStruct();
+  foo->
 }
 
 #ifdef _WIN32
