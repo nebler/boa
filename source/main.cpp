@@ -1064,17 +1064,24 @@ static std::unique_ptr<StructAST> ParseStruct()
 StructType* StructAST::codegen()
 {
   llvm::StructType* structType =
-      llvm::StructType::create(*TheContext, llvm::StringRef(this->getName()));
+      StructType::create(*TheContext, llvm::StringRef(this->getName()));
   std::vector<llvm::Type*> memberTypes;
   for (auto it = this->Fields.begin(); it != this->Fields.end(); ++it) {
     memberTypes.push_back(DefinedTypes[*it]);
   }
-
   structType->setBody(memberTypes);
-  structType->print(llvm::outs());
-  TheModule->print(llvm::outs(), nullptr);
   DefinedTypes[this->getName()] = structType;
   tokenizer->getNextToken();
+
+  // Create a constuctor for the structs
+  llvm::FunctionType* FuncType =
+      llvm::FunctionType::get(structType, {memberTypes}, false);
+  llvm::Function* TheFunction =
+      llvm::Function::Create(FuncType,
+                             llvm::Function::ExternalLinkage,
+                             this->getName() + "_ctor",
+                             TheModule.get());
+
   return structType;
 }
 
@@ -1325,6 +1332,26 @@ int main(int argc, char* argv[])
   // is it similar to rust type?
   // Run the main "interpreter loop" now.
   MainLoop();
+
+  // Define the struct type
+  std::vector<llvm::Type*> StructElements;
+  StructElements.push_back(llvm::Type::getInt32Ty(*TheContext));  // i32
+  StructElements.push_back(llvm::Type::getFloatTy(*TheContext));  // float
+  llvm::StructType* MyStructType =
+      llvm::StructType::create(*TheContext, "my_struct2");
+  MyStructType->setBody(StructElements);
+
+  // Use the struct type in function declarations
+  llvm::Type* StructPtrType = MyStructType->getPointerTo();
+  llvm::FunctionType* FuncType =
+      llvm::FunctionType::get(MyStructType, {StructPtrType}, false);
+
+  // Declare functions
+  llvm::Function::Create(FuncType,
+                         llvm::Function::ExternalLinkage,
+                         "my_function1",
+                         TheModule.get());
+
   // Print out all of the generated code.
   TheModule->print(errs(), nullptr);
 
