@@ -1297,6 +1297,7 @@ static void MainLoop()
         HandleExtern();
         break;
       case tok_strcut:
+        std::cout << "struct" << std::endl;
         HandleStruct();
         break;
       default:

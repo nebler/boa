@@ -7,7 +7,7 @@
 enum Token
 {
   // var definition
-  tok_var = -13,
+  tok_var = -17,
   tok_eof = -1,
 
   // commands
