@@ -1,12 +1,13 @@
-struct foo {
-    test int
+struct Heat {
+    Fahrenheit int,
+    Celcius int
 }
 
-struct foofer {
-    hehe foo
+struct Humidity {
+    airdensity int
 }
 
-struct fooferfer {
-    hehe foofer,
-    test foo
+struct Weather {
+    heat Heat,
+    humidity Humidity
 }

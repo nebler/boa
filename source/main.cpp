@@ -106,15 +106,15 @@ static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 class StructAST
 {
   std::string Name;
-  std::vector<StructAST> Fields;
+  std::vector<std::string> Fields;
 
 public:
-  StructAST(const std::string& Name, std::vector<StructAST> Fields)
+  StructAST(const std::string& Name, std::vector<std::string> Fields)
       : Name(Name)
       , Fields(std::move(Fields))
   {
   }
-  Function* codegen();
+  StructType* codegen();
   const std::string& getName() const { return Name; }
 };
 
@@ -988,19 +988,20 @@ static void PopulateTypes()
   DefinedTypes["float"] = llvm::Type::getFloatTy(*TheContext);
 }
 
-// Dummy ParseType function to demonstrate the functionality
-llvm::Type* ParseType()
+// Dummy CheckType function to demonstrate the functionality
+std::string CheckType()
 {
   int tok = tokenizer->getNextToken();
   if (tok == tok_int) {
-    return DefinedTypes["int"];
+    return "int";
   } else if (tok == tok_float) {
-    return DefinedTypes["float"];
+    return "float";
   }
   auto it = DefinedTypes[IdentifierStr];
   if (it != nullptr) {
-    return it;
+    return IdentifierStr;
   } else {
+    std::cerr << "Couldn't find type of " << IdentifierStr << std::endl;
     return nullptr;
   }
 }
@@ -1015,28 +1016,24 @@ struct User {
 }
 */
 // Function to parse the struct and create LLVM IR
-static llvm::StructType* ParseStruct()
+static std::unique_ptr<StructAST> ParseStruct()
 {
   // struct has already been parsed before
   tokenizer->getNextToken();  // get the struct name
 
-  llvm::StringRef Name(IdentifierStr);
-  llvm::StructType* structType = llvm::StructType::create(*TheContext, Name);
-
+  string name = IdentifierStr;
   tokenizer->getNextToken();  // eat the '{'
 
-  std::vector<llvm::Type*> structMembers;
+  std::vector<string> structMembers;
 
   tokenizer->getNextToken();
 
   if (CurTok == '}') {
-    structType->print(llvm::outs());
-    TheModule->print(llvm::outs(), nullptr);
-    return structType;
+    return make_unique<StructAST>(StructAST(name, structMembers));
   }
 
   while (true) {
-    // Parse the member type and name, assume we have a function `ParseType`
+    // Parse the member type and name, assume we have a function `CheckType`
     // that returns an LLVM type
     // Parse the member name
 
@@ -1047,11 +1044,7 @@ static llvm::StructType* ParseStruct()
     }
     std::string memberName = IdentifierStr;
 
-    llvm::Type* memberType = ParseType();
-    if (!memberType) {
-      std::cerr << "Error: unknown type " << IdentifierStr << std::endl;
-      return nullptr;
-    }
+    std::string memberType = CheckType();
     structMembers.push_back(memberType);
     tokenizer->getNextToken();
     if (CurTok != ',') {
@@ -1062,17 +1055,34 @@ static llvm::StructType* ParseStruct()
   }
 
   if (CurTok == '}') {
-    structType->setBody(structMembers);
-    structType->print(llvm::outs());
-    TheModule->print(llvm::outs(), nullptr);
-    std::cout << "ayo" << std::endl;
-    tokenizer->getNextToken();
-    DefinedTypes[structType->getName().str()] = structType;
-    return structType;
-
+    return make_unique<StructAST>(StructAST(name, structMembers));
   } else {
     std::cerr << "Something went wrong I was expecting a }" << std::endl;
   }
+}
+
+StructType* StructAST::codegen()
+{
+  llvm::StructType* structType =
+      StructType::create(*TheContext, llvm::StringRef(this->getName()));
+  std::vector<llvm::Type*> memberTypes;
+  for (auto it = this->Fields.begin(); it != this->Fields.end(); ++it) {
+    memberTypes.push_back(DefinedTypes[*it]);
+  }
+  structType->setBody(memberTypes);
+  DefinedTypes[this->getName()] = structType;
+  tokenizer->getNextToken();
+
+  // Create a constuctor for the structs
+  llvm::FunctionType* FuncType =
+      llvm::FunctionType::get(structType, {memberTypes}, false);
+  llvm::Function* TheFunction =
+      llvm::Function::Create(FuncType,
+                             llvm::Function::ExternalLinkage,
+                             this->getName() + "_ctor",
+                             TheModule.get());
+
+  return structType;
 }
 
 /// prototype
@@ -1210,6 +1220,7 @@ static void HandleExtern()
 static void HandleStruct()
 {
   auto foo = ParseStruct();
+  foo->codegen();
 }
 
 #ifdef _WIN32
@@ -1321,6 +1332,26 @@ int main(int argc, char* argv[])
   // is it similar to rust type?
   // Run the main "interpreter loop" now.
   MainLoop();
+
+  // Define the struct type
+  std::vector<llvm::Type*> StructElements;
+  StructElements.push_back(llvm::Type::getInt32Ty(*TheContext));  // i32
+  StructElements.push_back(llvm::Type::getFloatTy(*TheContext));  // float
+  llvm::StructType* MyStructType =
+      llvm::StructType::create(*TheContext, "my_struct2");
+  MyStructType->setBody(StructElements);
+
+  // Use the struct type in function declarations
+  llvm::Type* StructPtrType = MyStructType->getPointerTo();
+  llvm::FunctionType* FuncType =
+      llvm::FunctionType::get(MyStructType, {StructPtrType}, false);
+
+  // Declare functions
+  llvm::Function::Create(FuncType,
+                         llvm::Function::ExternalLinkage,
+                         "my_function1",
+                         TheModule.get());
+
   // Print out all of the generated code.
   TheModule->print(errs(), nullptr);
 
