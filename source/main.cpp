@@ -1081,6 +1081,33 @@ StructType* StructAST::codegen()
                              llvm::Function::ExternalLinkage,
                              this->getName() + "_ctor",
                              TheModule.get());
+  llvm::BasicBlock* entry =
+      llvm::BasicBlock::Create(*TheContext, "entry", TheFunction);
+  Builder->SetInsertPoint(entry);
+  std::cout << "here" << std::endl;
+  std::cout << structType->getName().str() << std::endl;
+
+  if (structType) {
+    llvm::Value* structAlloc = Builder->CreateAlloca(structType);
+
+    // Initialize struct members
+    unsigned idx = 0;
+    for (llvm::Function::arg_iterator arg = TheFunction->arg_begin();
+         arg != TheFunction->arg_end();
+         ++arg, ++idx)
+    {
+      llvm::Value* memberPtr =
+          Builder->CreateStructGEP(structType, structAlloc, idx);
+      Builder->CreateStore(arg, memberPtr);
+    }
+
+    // Load the struct and return it
+    llvm::Value* loadedStruct = Builder->CreateLoad(structType, structAlloc);
+    Builder->CreateRet(loadedStruct);
+  } else {
+    std::cerr << "Error: structType is null." << std::endl;
+    return nullptr;  // Or handle the error appropriately
+  }
 
   return structType;
 }
