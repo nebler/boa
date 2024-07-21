@@ -1073,7 +1073,7 @@ StructType* StructAST::codegen()
   DefinedTypes[this->getName()] = structType;
   tokenizer->getNextToken();
 
-  // Create a constuctor for the structs
+  // Create a constructor for the structs
   llvm::FunctionType* FuncType =
       llvm::FunctionType::get(structType, {memberTypes}, false);
   llvm::Function* TheFunction =
@@ -1219,8 +1219,8 @@ static void HandleExtern()
 
 static void HandleStruct()
 {
-  auto foo = ParseStruct();
-  foo->codegen();
+  auto structAST = ParseStruct();
+  structAST->codegen();
 }
 
 #ifdef _WIN32

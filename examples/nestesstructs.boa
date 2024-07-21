@@ -1,6 +1,6 @@
 struct Heat {
     Fahrenheit int,
-    Celcius int
+    Celsius int
 }
 
 struct Humidity {
