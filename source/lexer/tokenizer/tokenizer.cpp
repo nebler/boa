@@ -18,8 +18,8 @@ int Tokenizer::gettok()
     while (isalnum((LastChar = this->reader->readInput())))
       IdentifierStr += LastChar;
 
-    if (IdentifierStr == "def")
-      return tok_def;
+    if (IdentifierStr == "fn")
+      return tok_fn;
     if (IdentifierStr == "extern")
       return tok_extern;
     if (IdentifierStr == "if")

@@ -1133,6 +1133,8 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
       return LogErrorP("Expected function name in prototype");
     case tok_identifier:
       FnName = IdentifierStr;
+      // then this can have a different type then double
+      // can be a function or a variable
       Kind = 0;
       tokenizer->getNextToken();
       break;
@@ -1151,6 +1153,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
         return LogErrorP("Expected binary operator");
       FnName = "binary";
       FnName += (char)CurTok;
+      // type of double (for now)
       Kind = 2;
       tokenizer->getNextToken();
 
@@ -1163,12 +1166,12 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
       }
       break;
   }
-
   if (CurTok != '(')
     return LogErrorP("Expected '(' in prototype");
 
   std::vector<std::string> ArgNames;
   while (tokenizer->getNextToken() == tok_identifier)
+
     ArgNames.push_back(IdentifierStr);
   if (CurTok != ')')
     return LogErrorP("Expected ')' in prototype");
@@ -1217,7 +1220,7 @@ static std::unique_ptr<PrototypeAST> ParseExtern()
   return ParsePrototype();
 }
 
-static void HandleDefinition()
+static void HandleFunction()
 {
   if (auto FnAST = ParseDefinition()) {
     if (auto* FnIR = FnAST->codegen()) {
@@ -1325,8 +1328,8 @@ static void MainLoop()
       case ';':  // ignore top-level semicolons.
         tokenizer->getNextToken();
         break;
-      case tok_def:
-        HandleDefinition();
+      case tok_fn:
+        HandleFunction();
         break;
       case tok_extern:
         HandleExtern();

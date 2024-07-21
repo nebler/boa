@@ -11,7 +11,7 @@ enum Token
   tok_eof = -1,
 
   // commands
-  tok_def = -2,
+  tok_fn = -2,
   tok_extern = -3,
 
   // primary
