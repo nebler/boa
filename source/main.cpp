@@ -362,8 +362,15 @@ Value* IfExprAST::codegen()
 Function* getFunction(std::string Name)
 {
   // First, see if the function has already been added to the current module.
-  if (auto* F = TheModule->getFunction(Name))
+  if (auto* F = TheModule->getFunction(Name)) {
+    std::cout << "Module foofer" << std::endl;
     return F;
+  }
+
+  if (auto* F = TheModule->getFunction(Name + "_ctor")) {
+    std::cout << "Module foofer" << std::endl;
+    return F;
+  }
 
   // If not, check whether we can codegen the declaration from some existing
   // prototype.
@@ -1084,8 +1091,6 @@ StructType* StructAST::codegen()
   llvm::BasicBlock* entry =
       llvm::BasicBlock::Create(*TheContext, "entry", TheFunction);
   Builder->SetInsertPoint(entry);
-  std::cout << "here" << std::endl;
-  std::cout << structType->getName().str() << std::endl;
 
   if (structType) {
     llvm::Value* structAlloc = Builder->CreateAlloca(structType);
@@ -1108,7 +1113,10 @@ StructType* StructAST::codegen()
     std::cerr << "Error: structType is null." << std::endl;
     return nullptr;  // Or handle the error appropriately
   }
-
+  auto constructorPrototytpe =
+      PrototypeAST(this->getName() + "_ctor", this->Fields);
+  FunctionProtos[this->getName()] =
+      make_unique<PrototypeAST>(constructorPrototytpe);
   return structType;
 }
 
@@ -1360,25 +1368,6 @@ int main(int argc, char* argv[])
   // is it similar to rust type?
   // Run the main "interpreter loop" now.
   MainLoop();
-
-  // Define the struct type
-  std::vector<llvm::Type*> StructElements;
-  StructElements.push_back(llvm::Type::getInt32Ty(*TheContext));  // i32
-  StructElements.push_back(llvm::Type::getFloatTy(*TheContext));  // float
-  llvm::StructType* MyStructType =
-      llvm::StructType::create(*TheContext, "my_struct2");
-  MyStructType->setBody(StructElements);
-
-  // Use the struct type in function declarations
-  llvm::Type* StructPtrType = MyStructType->getPointerTo();
-  llvm::FunctionType* FuncType =
-      llvm::FunctionType::get(MyStructType, {StructPtrType}, false);
-
-  // Declare functions
-  llvm::Function::Create(FuncType,
-                         llvm::Function::ExternalLinkage,
-                         "my_function1",
-                         TheModule.get());
 
   // Print out all of the generated code.
   TheModule->print(errs(), nullptr);
