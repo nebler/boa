@@ -1034,7 +1034,7 @@ static std::unique_ptr<StructAST> ParseStruct()
   string name = IdentifierStr;
   tokenizer->getNextToken();  // eat the '{'
 
-  std::vector<string> structMembers;
+  std::map<string, string> structMembers;
 
   tokenizer->getNextToken();
 
@@ -1055,7 +1055,7 @@ static std::unique_ptr<StructAST> ParseStruct()
     std::string memberName = IdentifierStr;
 
     std::string memberType = CheckType();
-    structMembers.push_back(memberType);
+    structMembers[memberName] = memberType;
     tokenizer->getNextToken();
     if (CurTok != ',') {
       break;
@@ -1077,7 +1077,7 @@ StructType* StructAST::codegen()
       StructType::create(*TheContext, llvm::StringRef(this->getName()));
   std::vector<llvm::Type*> memberTypes;
   for (auto it = this->Fields.begin(); it != this->Fields.end(); ++it) {
-    memberTypes.push_back(DefinedTypes[it->first[0]]);
+    memberTypes.push_back(DefinedTypes[it->first]);
   }
   structType->setBody(memberTypes);
   DefinedTypes[this->getName()] = structType;
