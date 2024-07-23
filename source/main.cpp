@@ -71,19 +71,22 @@ static std::map<char, int> BinopPrecedence;
 class PrototypeAST
 {
   std::string Name;
-  std::vector<std::string> Args;
+  std::map<std::string, std::string> Args;
+  std::string ReturnType;
   bool IsOperator;
   unsigned Precedence;  // Precedence if a binary op.
 
 public:
   PrototypeAST(const std::string& Name,
-               std::vector<std::string> Args,
+               std::map<std::string, std::string> Args,
+               const std::string& ReturnType,
                bool IsOperator = false,
                unsigned Prec = 0)
       : Name(Name)
       , Args(std::move(Args))
       , IsOperator(IsOperator)
       , Precedence(Prec)
+      , ReturnType(ReturnType)
   {
   }
   Function* codegen();
@@ -91,7 +94,7 @@ public:
 
   bool isUnaryOp() const { return IsOperator && Args.size() == 1; }
   bool isBinaryOp() const { return IsOperator && Args.size() == 2; }
-
+  const std::string& getReturnType() const { return ReturnType; }
   char getOperatorName() const
   {
     assert(isUnaryOp() || isBinaryOp());
@@ -106,10 +109,10 @@ static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 class StructAST
 {
   std::string Name;
-  std::vector<std::string> Fields;
+  std::map<std::string, std::string> Fields;
 
 public:
-  StructAST(const std::string& Name, std::vector<std::string> Fields)
+  StructAST(const std::string& Name, std::map<std::string, std::string> Fields)
       : Name(Name)
       , Fields(std::move(Fields))
   {
@@ -1074,7 +1077,7 @@ StructType* StructAST::codegen()
       StructType::create(*TheContext, llvm::StringRef(this->getName()));
   std::vector<llvm::Type*> memberTypes;
   for (auto it = this->Fields.begin(); it != this->Fields.end(); ++it) {
-    memberTypes.push_back(DefinedTypes[*it]);
+    memberTypes.push_back(DefinedTypes[it->first[0]]);
   }
   structType->setBody(memberTypes);
   DefinedTypes[this->getName()] = structType;
@@ -1114,7 +1117,7 @@ StructType* StructAST::codegen()
     return nullptr;  // Or handle the error appropriately
   }
   auto constructorPrototytpe =
-      PrototypeAST(this->getName() + "_ctor", this->Fields);
+      PrototypeAST(this->getName() + "_ctor", this->Fields, this->getName());
   FunctionProtos[this->getName()] =
       make_unique<PrototypeAST>(constructorPrototytpe);
   return structType;
@@ -1190,7 +1193,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
 /// definition ::= 'def' prototype expression
 static std::unique_ptr<FunctionAST> ParseDefinition()
 {
-  tokenizer->getNextToken();  // eat def.
+  tokenizer->getNextToken();  // eat fn.
   std::unique_ptr<PrototypeAST> Proto = ParsePrototype();
   if (!Proto)
     return nullptr;
