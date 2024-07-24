@@ -485,7 +485,10 @@ Value* CallExprAST::codegen()
 Function* PrototypeAST::codegen()
 {
   // Make the function type:  double(double,double) etc.
-  std::vector<Type*> Doubles(Args.size(), Type::getDoubleTy(*TheContext));
+  std::vector<Type*> ArgumentTypes;
+  for (auto const& x : this->Args) {
+    ArgumentTypes.push_back(DefinedTypes[x.second]);
+  }
   // The call to FunctionType::get creates the FunctionType that should be used
   // for a given Prototype. Since all function arguments in Kaleidoscope are of
   // type double, the first line creates a vector of “N” LLVM double types. It
@@ -493,16 +496,19 @@ Function* PrototypeAST::codegen()
   // “N” doubles as arguments, returns one double as a result, and that is not
   // vararg (the false parameter indicates this). Note that Types in LLVM are
   // uniqued just like Constants are, so you don’t “new” a type, you “get” it.
-  FunctionType* FT =
-      FunctionType::get(Type::getDoubleTy(*TheContext), Doubles, false);
+  Type* type = DefinedTypes[this->ReturnType];
+  FunctionType* FT = FunctionType::get(type, ArgumentTypes, false);
   // creates the IR function corresponding to the Prototype
   Function* F =
       Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
 
   // Set names for all arguments from function from above
   unsigned Idx = 0;
-  for (auto& Arg : F->args())
-    Arg.setName(Args[Idx++]);
+  auto it = this->Args.begin();
+  for (auto& Arg : F->args()) {
+    std::advance(it, Idx++);
+    Arg.setName(it->first);
+  }
 
   return F;
 }
