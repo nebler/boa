@@ -1071,6 +1071,8 @@ static std::unique_ptr<StructAST> ParseStruct()
   }
 
   if (CurTok == '}') {
+    tokenizer->getNextToken();
+
     return make_unique<StructAST>(StructAST(name, structMembers));
   } else {
     std::cerr << "Something went wrong I was expecting a }" << std::endl;
