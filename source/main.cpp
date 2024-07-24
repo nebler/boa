@@ -57,7 +57,8 @@ static std::unique_ptr<Tokenizer> tokenizer;
 /// BinopPrecedence - This holds the precedence for each binary operator that is
 /// defined.
 static std::map<char, int> BinopPrecedence;
-
+static std::map<std::string, llvm::StructType*> DefinedStructs;
+static std::map<std::string, llvm::Type*> DefinedTypes;
 /// PrototypeAST - This class represents the "prototype" for a function,
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes).
@@ -996,8 +997,6 @@ static std::unique_ptr<ExprAST> ParseExpression()
   return ParseBinOpRHS(0, std::move(LHS));
 }
 
-static std::map<std::string, llvm::StructType*> DefinedStructs;
-static std::map<std::string, llvm::Type*> DefinedTypes;
 static void PopulateTypes()
 {
   DefinedTypes["int"] = llvm::Type::getInt32Ty(*TheContext);
@@ -1178,22 +1177,39 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
   if (CurTok != '(')
     return LogErrorP("Expected '(' in prototype");
 
-  std::vector<std::string> ArgNames;
-  while (tokenizer->getNextToken() == tok_identifier)
+  /*
 
-    ArgNames.push_back(IdentifierStr);
+  fn plus_one(x int, y int) -> int {
+      return x + y;
+  }
+
+  */
+  std::map<std::string, std::string> Args;
+  while (tokenizer->getNextToken() != ')') {
+    string name = IdentifierStr;
+    tokenizer->getNextToken();
+    string type = IdentifierStr;
+    tokenizer->getNextToken();
+    if (CurTok != ',') {
+      std::cerr << "error occured" << std::endl;
+    }
+    std::cout << name << " is of type " << type << std::endl;
+    Args[name] = type;
+  }
   if (CurTok != ')')
     return LogErrorP("Expected ')' in prototype");
 
   // success.
   tokenizer->getNextToken();  // eat ')'.
 
-  // Verify right number of names for operator.
-  if (Kind && ArgNames.size() != Kind)
-    return LogErrorP("Invalid number of operands for operator");
-
+  // success.
+  tokenizer->getNextToken();  // eat '-'.
+  tokenizer->getNextToken();  // eat '>'.
+  tokenizer->getNextToken();
+  string ReturnType = IdentifierStr;
+  std::cout << ReturnType << std::endl;
   return std::make_unique<PrototypeAST>(
-      FnName, std::move(ArgNames), Kind != 0, BinaryPrecedence);
+      FnName, Args, ReturnType, Kind != 0, BinaryPrecedence);
 }
 
 /// definition ::= 'def' prototype expression
