@@ -85,9 +85,9 @@ public:
                unsigned Prec = 0)
       : Name(Name)
       , Args(std::move(Args))
+      , ReturnType(ReturnType)
       , IsOperator(IsOperator)
       , Precedence(Prec)
-      , ReturnType(ReturnType)
   {
   }
   Function* codegen();
@@ -705,6 +705,8 @@ std::unique_ptr<ExprAST> LogError(const char* Str)
 }
 std::unique_ptr<PrototypeAST> LogErrorP(const char* Str)
 {
+  std::cout << "CurrentToken is:" << CurTok << std::endl;
+  std::cout << "IdentifierString is" << IdentifierStr << std::endl;
   LogError(Str);
   return nullptr;
 }
@@ -1046,7 +1048,6 @@ static std::unique_ptr<StructAST> ParseStruct()
   if (CurTok == '}') {
     return make_unique<StructAST>(StructAST(name, structMembers));
   }
-
   while (true) {
     // Parse the member type and name, assume we have a function `CheckType`
     // that returns an LLVM type
@@ -1086,16 +1087,20 @@ StructType* StructAST::codegen()
   }
   structType->setBody(memberTypes);
   DefinedTypes[this->getName()] = structType;
-  tokenizer->getNextToken();
-
+  std::cout << this->getName() << std::endl;
+  structType->print(llvm::outs());
   // Create a constructor for the structs
+  cout << "foofer2" << endl;
   llvm::FunctionType* FuncType =
       llvm::FunctionType::get(structType, {memberTypes}, false);
+
   llvm::Function* TheFunction =
       llvm::Function::Create(FuncType,
                              llvm::Function::ExternalLinkage,
                              this->getName() + "_ctor",
                              TheModule.get());
+  cout << "foofer" << endl;
+
   llvm::BasicBlock* entry =
       llvm::BasicBlock::Create(*TheContext, "entry", TheFunction);
   Builder->SetInsertPoint(entry);
@@ -1123,6 +1128,7 @@ StructType* StructAST::codegen()
   }
   auto constructorPrototytpe =
       PrototypeAST(this->getName() + "_ctor", this->Fields, this->getName());
+
   FunctionProtos[this->getName()] =
       make_unique<PrototypeAST>(constructorPrototytpe);
   return structType;
@@ -1144,6 +1150,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
       // then this can have a different type then double
       // can be a function or a variable
       Kind = 0;
+      std::cout << "foo" << std::endl;
       tokenizer->getNextToken();
       break;
     case tok_unary:
@@ -1174,8 +1181,10 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
       }
       break;
   }
-  if (CurTok != '(')
+
+  if (CurTok != '(') {
     return LogErrorP("Expected '(' in prototype");
+  }
 
   /*
 
@@ -1185,19 +1194,25 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
 
   */
   std::map<std::string, std::string> Args;
-  while (tokenizer->getNextToken() != ')') {
+  while (CurTok != ')') {
+    tokenizer->getNextToken();
+    // x
     string name = IdentifierStr;
     tokenizer->getNextToken();
+    //
     string type = IdentifierStr;
     tokenizer->getNextToken();
-    if (CurTok != ',') {
-      std::cerr << "error occured" << std::endl;
-    }
-    std::cout << name << " is of type " << type << std::endl;
+
     Args[name] = type;
+
+    if (CurTok == ')') {
+      Args[name] = type;
+      break;
+    }
   }
-  if (CurTok != ')')
+  if (CurTok != ')') {
     return LogErrorP("Expected ')' in prototype");
+  }
 
   // success.
   tokenizer->getNextToken();  // eat ')'.
@@ -1208,8 +1223,10 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
   tokenizer->getNextToken();
   string ReturnType = IdentifierStr;
   std::cout << ReturnType << std::endl;
-  return std::make_unique<PrototypeAST>(
-      FnName, Args, ReturnType, Kind != 0, BinaryPrecedence);
+  auto constructorPrototytpe =
+      PrototypeAST(FnName, Args, ReturnType, Kind != 0, BinaryPrecedence);
+  constructorPrototytpe.codegen()->print(llvm::outs());
+  return std::make_unique<PrototypeAST>(constructorPrototytpe);
 }
 
 /// definition ::= 'def' prototype expression
@@ -1231,8 +1248,8 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
   if (auto E = ParseExpression()) {
     printf("parsing top level expression \n");
     // Make an anonymous proto.
-    auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
-                                                std::vector<std::string>());
+    // tod: fix it
+    auto Proto = nullptr;
     return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   }
   return nullptr;

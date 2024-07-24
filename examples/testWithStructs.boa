@@ -1,5 +1,5 @@
 struct Foo {
-    test i32
+    test int
 }
 
 
@@ -7,6 +7,3 @@ fn foofer(foo: Foo) -> Foo {
     return foo;
 }
 
-
-var test = Foo{1};
-foofer(test);
