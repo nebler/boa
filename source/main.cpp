@@ -1083,7 +1083,8 @@ StructType* StructAST::codegen()
       StructType::create(*TheContext, llvm::StringRef(this->getName()));
   std::vector<llvm::Type*> memberTypes;
   for (auto it = this->Fields.begin(); it != this->Fields.end(); ++it) {
-    memberTypes.push_back(DefinedTypes[it->first]);
+    cout << it->second << endl;
+    memberTypes.push_back(DefinedTypes[it->second]);
   }
   structType->setBody(memberTypes);
   DefinedTypes[this->getName()] = structType;
