@@ -57,7 +57,8 @@ static std::unique_ptr<Tokenizer> tokenizer;
 /// BinopPrecedence - This holds the precedence for each binary operator that is
 /// defined.
 static std::map<char, int> BinopPrecedence;
-
+static std::map<std::string, llvm::StructType*> DefinedStructs;
+static std::map<std::string, llvm::Type*> DefinedTypes;
 /// PrototypeAST - This class represents the "prototype" for a function,
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes).
@@ -71,17 +72,20 @@ static std::map<char, int> BinopPrecedence;
 class PrototypeAST
 {
   std::string Name;
-  std::vector<std::string> Args;
+  std::map<std::string, std::string> Args;
+  std::string ReturnType;
   bool IsOperator;
   unsigned Precedence;  // Precedence if a binary op.
 
 public:
   PrototypeAST(const std::string& Name,
-               std::vector<std::string> Args,
+               std::map<std::string, std::string> Args,
+               const std::string& ReturnType,
                bool IsOperator = false,
                unsigned Prec = 0)
       : Name(Name)
       , Args(std::move(Args))
+      , ReturnType(ReturnType)
       , IsOperator(IsOperator)
       , Precedence(Prec)
   {
@@ -91,7 +95,7 @@ public:
 
   bool isUnaryOp() const { return IsOperator && Args.size() == 1; }
   bool isBinaryOp() const { return IsOperator && Args.size() == 2; }
-
+  const std::string& getReturnType() const { return ReturnType; }
   char getOperatorName() const
   {
     assert(isUnaryOp() || isBinaryOp());
@@ -106,10 +110,10 @@ static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 class StructAST
 {
   std::string Name;
-  std::vector<std::string> Fields;
+  std::map<std::string, std::string> Fields;
 
 public:
-  StructAST(const std::string& Name, std::vector<std::string> Fields)
+  StructAST(const std::string& Name, std::map<std::string, std::string> Fields)
       : Name(Name)
       , Fields(std::move(Fields))
   {
@@ -482,7 +486,10 @@ Value* CallExprAST::codegen()
 Function* PrototypeAST::codegen()
 {
   // Make the function type:  double(double,double) etc.
-  std::vector<Type*> Doubles(Args.size(), Type::getDoubleTy(*TheContext));
+  std::vector<Type*> ArgumentTypes;
+  for (auto const& x : this->Args) {
+    ArgumentTypes.push_back(DefinedTypes[x.second]);
+  }
   // The call to FunctionType::get creates the FunctionType that should be used
   // for a given Prototype. Since all function arguments in Kaleidoscope are of
   // type double, the first line creates a vector of “N” LLVM double types. It
@@ -490,16 +497,19 @@ Function* PrototypeAST::codegen()
   // “N” doubles as arguments, returns one double as a result, and that is not
   // vararg (the false parameter indicates this). Note that Types in LLVM are
   // uniqued just like Constants are, so you don’t “new” a type, you “get” it.
-  FunctionType* FT =
-      FunctionType::get(Type::getDoubleTy(*TheContext), Doubles, false);
+  Type* type = DefinedTypes[this->ReturnType];
+  FunctionType* FT = FunctionType::get(type, ArgumentTypes, false);
   // creates the IR function corresponding to the Prototype
   Function* F =
       Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
 
   // Set names for all arguments from function from above
   unsigned Idx = 0;
-  for (auto& Arg : F->args())
-    Arg.setName(Args[Idx++]);
+  auto it = this->Args.begin();
+  for (auto& Arg : F->args()) {
+    std::advance(it, Idx++);
+    Arg.setName(it->first);
+  }
 
   return F;
 }
@@ -695,6 +705,8 @@ std::unique_ptr<ExprAST> LogError(const char* Str)
 }
 std::unique_ptr<PrototypeAST> LogErrorP(const char* Str)
 {
+  std::cout << "CurrentToken is:" << CurTok << std::endl;
+  std::cout << "IdentifierString is" << IdentifierStr << std::endl;
   LogError(Str);
   return nullptr;
 }
@@ -987,8 +999,6 @@ static std::unique_ptr<ExprAST> ParseExpression()
   return ParseBinOpRHS(0, std::move(LHS));
 }
 
-static std::map<std::string, llvm::StructType*> DefinedStructs;
-static std::map<std::string, llvm::Type*> DefinedTypes;
 static void PopulateTypes()
 {
   DefinedTypes["int"] = llvm::Type::getInt32Ty(*TheContext);
@@ -1031,14 +1041,13 @@ static std::unique_ptr<StructAST> ParseStruct()
   string name = IdentifierStr;
   tokenizer->getNextToken();  // eat the '{'
 
-  std::vector<string> structMembers;
+  std::map<string, string> structMembers;
 
   tokenizer->getNextToken();
 
   if (CurTok == '}') {
     return make_unique<StructAST>(StructAST(name, structMembers));
   }
-
   while (true) {
     // Parse the member type and name, assume we have a function `CheckType`
     // that returns an LLVM type
@@ -1052,7 +1061,7 @@ static std::unique_ptr<StructAST> ParseStruct()
     std::string memberName = IdentifierStr;
 
     std::string memberType = CheckType();
-    structMembers.push_back(memberType);
+    structMembers[memberName] = memberType;
     tokenizer->getNextToken();
     if (CurTok != ',') {
       break;
@@ -1062,6 +1071,8 @@ static std::unique_ptr<StructAST> ParseStruct()
   }
 
   if (CurTok == '}') {
+    tokenizer->getNextToken();
+
     return make_unique<StructAST>(StructAST(name, structMembers));
   } else {
     std::cerr << "Something went wrong I was expecting a }" << std::endl;
@@ -1074,20 +1085,25 @@ StructType* StructAST::codegen()
       StructType::create(*TheContext, llvm::StringRef(this->getName()));
   std::vector<llvm::Type*> memberTypes;
   for (auto it = this->Fields.begin(); it != this->Fields.end(); ++it) {
-    memberTypes.push_back(DefinedTypes[*it]);
+    cout << it->second << endl;
+    memberTypes.push_back(DefinedTypes[it->second]);
   }
   structType->setBody(memberTypes);
   DefinedTypes[this->getName()] = structType;
-  tokenizer->getNextToken();
-
+  std::cout << this->getName() << std::endl;
+  structType->print(llvm::outs());
   // Create a constructor for the structs
+  cout << "foofer2" << endl;
   llvm::FunctionType* FuncType =
       llvm::FunctionType::get(structType, {memberTypes}, false);
+
   llvm::Function* TheFunction =
       llvm::Function::Create(FuncType,
                              llvm::Function::ExternalLinkage,
                              this->getName() + "_ctor",
                              TheModule.get());
+  cout << "foofer" << endl;
+
   llvm::BasicBlock* entry =
       llvm::BasicBlock::Create(*TheContext, "entry", TheFunction);
   Builder->SetInsertPoint(entry);
@@ -1114,7 +1130,8 @@ StructType* StructAST::codegen()
     return nullptr;  // Or handle the error appropriately
   }
   auto constructorPrototytpe =
-      PrototypeAST(this->getName() + "_ctor", this->Fields);
+      PrototypeAST(this->getName() + "_ctor", this->Fields, this->getName());
+
   FunctionProtos[this->getName()] =
       make_unique<PrototypeAST>(constructorPrototytpe);
   return structType;
@@ -1136,6 +1153,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
       // then this can have a different type then double
       // can be a function or a variable
       Kind = 0;
+      std::cout << "foo" << std::endl;
       tokenizer->getNextToken();
       break;
     case tok_unary:
@@ -1166,31 +1184,58 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
       }
       break;
   }
-  if (CurTok != '(')
+
+  if (CurTok != '(') {
     return LogErrorP("Expected '(' in prototype");
+  }
 
-  std::vector<std::string> ArgNames;
-  while (tokenizer->getNextToken() == tok_identifier)
+  /*
 
-    ArgNames.push_back(IdentifierStr);
-  if (CurTok != ')')
+  fn plus_one(x int, y int) -> int {
+      return x + y;
+  }
+
+  */
+  std::map<std::string, std::string> Args;
+  while (CurTok != ')') {
+    tokenizer->getNextToken();
+    // x
+    string name = IdentifierStr;
+    tokenizer->getNextToken();
+    //
+    string type = IdentifierStr;
+    tokenizer->getNextToken();
+
+    Args[name] = type;
+
+    if (CurTok == ')') {
+      Args[name] = type;
+      break;
+    }
+  }
+  if (CurTok != ')') {
     return LogErrorP("Expected ')' in prototype");
+  }
 
   // success.
   tokenizer->getNextToken();  // eat ')'.
 
-  // Verify right number of names for operator.
-  if (Kind && ArgNames.size() != Kind)
-    return LogErrorP("Invalid number of operands for operator");
-
-  return std::make_unique<PrototypeAST>(
-      FnName, std::move(ArgNames), Kind != 0, BinaryPrecedence);
+  // success.
+  tokenizer->getNextToken();  // eat '-'.
+  tokenizer->getNextToken();  // eat '>'.
+  tokenizer->getNextToken();
+  string ReturnType = IdentifierStr;
+  std::cout << ReturnType << std::endl;
+  auto constructorPrototytpe =
+      PrototypeAST(FnName, Args, ReturnType, Kind != 0, BinaryPrecedence);
+  constructorPrototytpe.codegen()->print(llvm::outs());
+  return std::make_unique<PrototypeAST>(constructorPrototytpe);
 }
 
 /// definition ::= 'def' prototype expression
 static std::unique_ptr<FunctionAST> ParseDefinition()
 {
-  tokenizer->getNextToken();  // eat def.
+  tokenizer->getNextToken();  // eat fn.
   std::unique_ptr<PrototypeAST> Proto = ParsePrototype();
   if (!Proto)
     return nullptr;
@@ -1206,8 +1251,8 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
   if (auto E = ParseExpression()) {
     printf("parsing top level expression \n");
     // Make an anonymous proto.
-    auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
-                                                std::vector<std::string>());
+    // tod: fix it
+    auto Proto = nullptr;
     return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   }
   return nullptr;
