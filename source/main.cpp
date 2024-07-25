@@ -367,12 +367,10 @@ Function* getFunction(std::string Name)
 {
   // First, see if the function has already been added to the current module.
   if (auto* F = TheModule->getFunction(Name)) {
-    std::cout << "Module foofer" << std::endl;
     return F;
   }
 
   if (auto* F = TheModule->getFunction(Name + "_ctor")) {
-    std::cout << "Module foofer" << std::endl;
     return F;
   }
 
