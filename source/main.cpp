@@ -663,8 +663,10 @@ Function* FunctionAST::codegen()
   NamedValues.clear();
   for (auto& Arg : TheFunction->args()) {
     // Create an alloca for this variable.
-    AllocaInst* Alloca =
-        CreateEntryBlockAlloca(TheFunction, std::string(Arg.getName()));
+    std::cout << std::string(Arg.getName()) << std::endl;
+    // std::cout << std::string(Arg.getType()->getStructName()) << std::endl;
+    AllocaInst* Alloca = Builder->CreateAlloca(
+        Arg.getType(), nullptr, std::string(Arg.getName()));
 
     // Store the initial value into the alloca.
     Builder->CreateStore(&Arg, Alloca);
@@ -1360,6 +1362,7 @@ static void HandleTopLevelExpression()
       assert(ExprSymbol.getAddress().getValue() != 0 && "Function not found");
       // Get the symbol's address and cast it to the right type (takes no
       // arguments, returns a double) so we can call it as a native function.
+
       double (*FP)() = ExprSymbol.getAddress().toPtr<double (*)()>();
       fprintf(stderr, "Evaluated to %f\n", FP());
       // Delete the anonymous expression module from the JIT.
