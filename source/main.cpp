@@ -937,11 +937,18 @@ static std::unique_ptr<ExprAST> ParsePrimary()
 static std::unique_ptr<ExprAST> ParseUnary()
 {
   // If the current token is not an operator, it must be a primary expr.
-  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
+  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',') {
+    std::cout << "aaah" << std::endl;
+    std::cout << CurTok << std::endl;
+    std::cout << IdentifierStr << std::endl;
     return ParsePrimary();
+  }
 
   // If this is a unary operator, read it.
   int Opc = CurTok;
+  std::cout << "ayo" << std::endl;
+  std::cout << CurTok << std::endl;
+  std::cout << IdentifierStr << std::endl;
   tokenizer->getNextToken();
   if (auto Operand = ParseUnary())
     return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
@@ -1227,6 +1234,8 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
   auto constructorPrototytpe =
       PrototypeAST(FnName, Args, ReturnType, Kind != 0, BinaryPrecedence);
   constructorPrototytpe.codegen()->print(llvm::outs());
+  tokenizer->getNextToken();  // eat the {
+
   return std::make_unique<PrototypeAST>(constructorPrototytpe);
 }
 
@@ -1238,8 +1247,10 @@ static std::unique_ptr<FunctionAST> ParseDefinition()
   if (!Proto)
     return nullptr;
 
-  if (auto E = ParseExpression())
+  if (auto E = ParseExpression()) {
     return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+  }
+
   return nullptr;
 }
 
