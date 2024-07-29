@@ -390,15 +390,11 @@ Function* getFunction(std::string Name)
 Value* BinaryExprAST::codegen()
 {
   // Special case '=' because we don't want to emit the LHS as an expression.
-  // It does not follow the emit LHS, emit RHS do computiation model
   if (Op == '=') {
-    // Assignment requires the LHS to be an identifier.
-    // This assume we're building without RTTI because LLVM builds that way by
-    // default.  If you build LLVM with RTTI this can be changed to a
-    // dynamic_cast for automatic error checking.
     VariableExprAST* LHSE = static_cast<VariableExprAST*>(LHS.get());
     if (!LHSE)
       return LogErrorV("destination of '=' must be a variable");
+
     // Codegen the RHS.
     Value* Val = RHS->codegen();
     if (!Val)
@@ -412,31 +408,42 @@ Value* BinaryExprAST::codegen()
     Builder->CreateStore(Val, Variable);
     return Val;
   }
-  // we generate code for the right as well as the left hand side
+
+  // Generate code for the LHS and RHS.
   Value* L = LHS->codegen();
   Value* R = RHS->codegen();
-  if (!L || !R) {
+  if (!L || !R)
     return nullptr;
-  }
+
+  // Determine the type of the operands.
+  bool isFloat =
+      L->getType()->isFloatingPointTy() || R->getType()->isFloatingPointTy();
+
   switch (Op) {
     case '+':
-      return Builder->CreateFAdd(L, R, "addtmp");
+      return isFloat ? Builder->CreateFAdd(L, R, "addtmp")
+                     : Builder->CreateAdd(L, R, "addtmp");
     case '-':
-      return Builder->CreateFSub(L, R, "subtmp");
+      return isFloat ? Builder->CreateFSub(L, R, "subtmp")
+                     : Builder->CreateSub(L, R, "subtmp");
     case '*':
-      return Builder->CreateFMul(L, R, "multmp");
+      return isFloat ? Builder->CreateFMul(L, R, "multmp")
+                     : Builder->CreateMul(L, R, "multmp");
     case '<':
-      // TODO: understand this
-      L = Builder->CreateFCmpULT(L, R, "cmptmp");
-      // Convert bool 0/1 to double 0.0 or 1.0
-      return Builder->CreateUIToFP(
-          L, Type::getDoubleTy(*TheContext), "booltmp");
+      if (isFloat) {
+        L = Builder->CreateFCmpULT(L, R, "cmptmp");
+        return Builder->CreateUIToFP(
+            L, Type::getDoubleTy(*TheContext), "booltmp");
+      } else {
+        L = Builder->CreateICmpULT(L, R, "cmptmp");
+        return Builder->CreateIntCast(
+            L, Type::getInt32Ty(*TheContext), false, "booltmp");
+      }
     default:
       break;
   }
 
-  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
-  // a call to it.
+  // If it's not a builtin binary operator, it must be a user-defined one.
   Function* F = getFunction(std::string("binary") + Op);
   assert(F && "binary operator not found!");
 
@@ -635,6 +642,7 @@ public:
 
 Value* UnaryExprAST::codegen()
 {
+  std::cout << "I get till here" << std::endl;
   Value* OperandV = Operand->codegen();
   if (!OperandV)
     return nullptr;
@@ -667,7 +675,6 @@ Function* FunctionAST::codegen()
   for (auto& Arg : TheFunction->args()) {
     // Create an alloca for this variable.
     std::cout << std::string(Arg.getName()) << std::endl;
-    std::cout << std::string(Arg.getType()->ID) << std::endl;
     AllocaInst* Alloca = Builder->CreateAlloca(
         Arg.getType(), nullptr, std::string(Arg.getName()));
 
@@ -943,7 +950,6 @@ static std::unique_ptr<ExprAST> ParseUnary()
 {
   // If the current token is not an operator, it must be a primary expr.
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',') {
-    std::cout << "aaah" << std::endl;
     std::cout << CurTok << std::endl;
     std::cout << IdentifierStr << std::endl;
     return ParsePrimary();
@@ -951,9 +957,6 @@ static std::unique_ptr<ExprAST> ParseUnary()
 
   // If this is a unary operator, read it.
   int Opc = CurTok;
-  std::cout << "ayo" << std::endl;
-  std::cout << CurTok << std::endl;
-  std::cout << IdentifierStr << std::endl;
   tokenizer->getNextToken();
   if (auto Operand = ParseUnary())
     return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
