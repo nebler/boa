@@ -365,20 +365,23 @@ Value* IfExprAST::codegen()
 
 Function* getFunction(std::string Name)
 {
+  // If not, check whether we can codegen the declaration from some existing
+  // prototype.
+  auto FI = FunctionProtos.find(Name);
+  if (FI != FunctionProtos.end()) {
+    std::cout << "wee" << std::endl;
+    return FI->second->codegen();
+  }
+
   // First, see if the function has already been added to the current module.
   if (auto* F = TheModule->getFunction(Name)) {
+    std::cout << "module" << std::endl;
     return F;
   }
 
   if (auto* F = TheModule->getFunction(Name + "_ctor")) {
     return F;
   }
-
-  // If not, check whether we can codegen the declaration from some existing
-  // prototype.
-  auto FI = FunctionProtos.find(Name);
-  if (FI != FunctionProtos.end())
-    return FI->second->codegen();
 
   // If no existing prototype exists, return null.
   return nullptr;
@@ -664,7 +667,7 @@ Function* FunctionAST::codegen()
   for (auto& Arg : TheFunction->args()) {
     // Create an alloca for this variable.
     std::cout << std::string(Arg.getName()) << std::endl;
-    // std::cout << std::string(Arg.getType()->getStructName()) << std::endl;
+    std::cout << std::string(Arg.getType()->ID) << std::endl;
     AllocaInst* Alloca = Builder->CreateAlloca(
         Arg.getType(), nullptr, std::string(Arg.getName()));
 
