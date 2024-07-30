@@ -369,13 +369,11 @@ Function* getFunction(std::string Name)
   // prototype.
   auto FI = FunctionProtos.find(Name);
   if (FI != FunctionProtos.end()) {
-    std::cout << "wee" << std::endl;
     return FI->second->codegen();
   }
 
   // First, see if the function has already been added to the current module.
   if (auto* F = TheModule->getFunction(Name)) {
-    std::cout << "module" << std::endl;
     return F;
   }
 
@@ -642,7 +640,6 @@ public:
 
 Value* UnaryExprAST::codegen()
 {
-  std::cout << "I get till here" << std::endl;
   Value* OperandV = Operand->codegen();
   if (!OperandV)
     return nullptr;
@@ -674,7 +671,6 @@ Function* FunctionAST::codegen()
   NamedValues.clear();
   for (auto& Arg : TheFunction->args()) {
     // Create an alloca for this variable.
-    std::cout << std::string(Arg.getName()) << std::endl;
     AllocaInst* Alloca = Builder->CreateAlloca(
         Arg.getType(), nullptr, std::string(Arg.getName()));
 
@@ -710,6 +706,8 @@ Function* FunctionAST::codegen()
 /// LogError* - These are little helper functions for error handling.
 std::unique_ptr<ExprAST> LogError(const char* Str)
 {
+  std::cout << "CurrentToken is:" << CurTok << std::endl;
+  std::cout << "IdentifierString is" << IdentifierStr << std::endl;
   fprintf(stderr, "Error: %s\n", Str);
   return nullptr;
 }
@@ -940,6 +938,8 @@ static std::unique_ptr<ExprAST> ParsePrimary()
       return ParseForExpr();
     case tok_var:
       return ParseVarExpr();
+    case tok_eof:
+      return nullptr;
   }
 }
 
@@ -950,8 +950,6 @@ static std::unique_ptr<ExprAST> ParseUnary()
 {
   // If the current token is not an operator, it must be a primary expr.
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',') {
-    std::cout << CurTok << std::endl;
-    std::cout << IdentifierStr << std::endl;
     return ParsePrimary();
   }
 
@@ -1103,7 +1101,6 @@ StructType* StructAST::codegen()
   }
   structType->setBody(memberTypes);
   DefinedTypes[this->getName()] = structType;
-  std::cout << this->getName() << std::endl;
   structType->print(llvm::outs());
   // Create a constructor for the structs
   cout << "foofer2" << endl;
@@ -1166,7 +1163,6 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
       // then this can have a different type then double
       // can be a function or a variable
       Kind = 0;
-      std::cout << "foo" << std::endl;
       tokenizer->getNextToken();
       break;
     case tok_unary:
@@ -1238,7 +1234,6 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
   tokenizer->getNextToken();  // eat '>'.
   tokenizer->getNextToken();
   string ReturnType = IdentifierStr;
-  std::cout << ReturnType << std::endl;
   auto constructorPrototytpe =
       PrototypeAST(FnName, Args, ReturnType, Kind != 0, BinaryPrecedence);
   constructorPrototytpe.codegen()->print(llvm::outs());
@@ -1286,7 +1281,6 @@ static void HandleFunction()
 {
   if (auto FnAST = ParseDefinition()) {
     if (auto* FnIR = FnAST->codegen()) {
-      fprintf(stderr, "Read function definition:");
       FnIR->print(errs());
       fprintf(stderr, "\n");
       ExitOnErr(TheJIT->addModule(
@@ -1398,7 +1392,6 @@ static void MainLoop()
         HandleExtern();
         break;
       case tok_strcut:
-        std::cout << "struct" << std::endl;
         HandleStruct();
         break;
       default:

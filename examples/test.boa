@@ -1,3 +1,5 @@
 fn plusOne(x int, y int) -> int {
     x + y
 }
+
+plusOne(1, 1)

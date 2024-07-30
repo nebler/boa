@@ -2,7 +2,6 @@ struct Foo {
     test int
 }
 
-
 fn foofer(foo: Foo) -> Foo {
     return foo;
 }
