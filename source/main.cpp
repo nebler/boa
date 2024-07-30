@@ -450,6 +450,7 @@ Value* BinaryExprAST::codegen()
 }
 
 /// CallExprAST - Expression class for function calls.
+// todo: change this class so it somehow also creates the right type?
 class CallExprAST : public ExprAST
 {
   std::string Callee;
@@ -756,6 +757,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr()
 {
   std::string IdName = IdentifierStr;
 
+  std::cout << "this is the identifier name" << IdName << std::endl;
   tokenizer->getNextToken();  // eat identifier.
                               // Simple variable ref.
   if (CurTok != '(') {
@@ -950,12 +952,14 @@ static std::unique_ptr<ExprAST> ParseUnary()
 {
   // If the current token is not an operator, it must be a primary expr.
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',') {
+    std::cout << "yee2" << std::endl;
     return ParsePrimary();
   }
 
   // If this is a unary operator, read it.
   int Opc = CurTok;
   tokenizer->getNextToken();
+  std::cout << "yee1" << std::endl;
   if (auto Operand = ParseUnary())
     return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
   return nullptr;
@@ -1260,10 +1264,23 @@ static std::unique_ptr<FunctionAST> ParseDefinition()
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
 {
+  std::string IdName = IdentifierStr;
+  auto funciton = FunctionProtos.find(IdName);
+  std::cout << "this is the funciton" << IdName << std::endl;
+  auto FI = FunctionProtos.find(IdName);
+  if (FI != FunctionProtos.end()) {
+    std::cout << "we found a funciton" << std::endl;
+  }
+
   if (auto E = ParseExpression()) {
     printf("parsing top level expression \n");
     // Make an anonymous proto.
     // tod: fix it
+    llvm::Value* V = E->codegen();
+    std::string str;
+    llvm::raw_string_ostream rso(str);
+    V->print(rso);
+
     auto Proto = nullptr;
     return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   }
