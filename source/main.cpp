@@ -123,6 +123,8 @@ public:
 };
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
+// todo: parse the type of number as well
+// right now you can only do ints
 class NumberExprAST : public ExprAST
 {
   double Val;
