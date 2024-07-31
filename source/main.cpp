@@ -952,14 +952,12 @@ static std::unique_ptr<ExprAST> ParseUnary()
 {
   // If the current token is not an operator, it must be a primary expr.
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',') {
-    std::cout << "yee2" << std::endl;
     return ParsePrimary();
   }
 
   // If this is a unary operator, read it.
   int Opc = CurTok;
   tokenizer->getNextToken();
-  std::cout << "yee1" << std::endl;
   if (auto Operand = ParseUnary())
     return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
   return nullptr;
