@@ -138,8 +138,10 @@ public:
 
 Value* NumberExprAST::codegen()
 {
+  int value = (int)Val;
   // Just creates a constantfp
-  return ConstantFP::get(*TheContext, APFloat(Val));
+  return ConstantInt::get(*TheContext, APInt(32, value));
+  // return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
@@ -487,7 +489,10 @@ Value* CallExprAST::codegen()
       return nullptr;
     }
   }
-  return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+  std::cout << "error" << std::endl;
+  CallInst* call = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+  std::cout << "error" << std::endl;
+  return call;
 }
 
 Function* PrototypeAST::codegen()
