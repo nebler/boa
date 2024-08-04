@@ -740,7 +740,8 @@ static std::unique_ptr<ExprAST> ParseNumberExpr()
 {
   auto Result = std::make_unique<NumberExprAST>(NumVal);
   tokenizer->getNextToken();  // consume the number
-  return std::move(Result);
+
+    return std::move(Result);
 }
 
 /// parenexpr ::= '(' expression ')'
