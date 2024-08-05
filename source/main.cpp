@@ -102,6 +102,8 @@ public:
     return Name[Name.size() - 1];
   }
 
+  std::map<std::string, std::string> getArgs() { return Args; }
+
   unsigned getBinaryPrecedence() const { return Precedence; }
 };
 
@@ -140,10 +142,18 @@ public:
 
 Value* NumberExprAST::codegen()
 {
-  int value = (int)Val;
-  // Just creates a constantfp
-  return ConstantInt::get(*TheContext, APInt(32, value));
-  // return ConstantFP::get(*TheContext, APFloat(Val));
+  int value = static_cast<int>(Val);
+
+  // Use the defined type from DefinedTypes.
+  llvm::Type* IntType = DefinedTypes["int"];
+
+  // Ensure the type is an integer type (for safety).
+  if (IntType->isIntegerTy()) {
+    unsigned bitWidth = IntType->getIntegerBitWidth();
+    return ConstantInt::get(IntType, value, /*isSigned=*/true);
+  }
+
+  return LogErrorV("Expected integer type for 'int'");
 }
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
@@ -480,20 +490,26 @@ Value* CallExprAST::codegen()
 
   // if there is argument mismatch error
   if (CalleeF->arg_size() != Args.size()) {
-    return LogErrorV("Incorrec # arguments passed");
+    return LogErrorV("Incorrect # arguments passed");
   }
 
   std::vector<Value*> ArgsV;
   for (unsigned i = 0, e = Args.size(); i != e; i++) {
     // for every argument generate the code
-    ArgsV.push_back(Args[i]->codegen());
+    Value* value = Args[i]->codegen();
+    Type* ExpectedType = CalleeF->getFunctionType()->getParamType(i);
+    if (ExpectedType != value->getType()) {
+      LogErrorV("not the expected argument type!");
+      std::cerr << "what are you doing???" << std::endl;
+    }
+    ArgsV.push_back(value);
     if (!ArgsV.back()) {
       return nullptr;
     }
   }
-  std::cout << "error" << std::endl;
-  CallInst* call = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-  std::cout << "error" << std::endl;
+  // Get the function type
+  FunctionType* FT = CalleeF->getFunctionType();
+  CallInst* call = Builder->CreateCall(FT, CalleeF, ArgsV, "calltmp");
   return call;
 }
 
@@ -524,7 +540,7 @@ Function* PrototypeAST::codegen()
     std::advance(it, Idx++);
     Arg.setName(it->first);
   }
-
+  std::cout << "wooof" << std::endl;
   return F;
 }
 
@@ -648,6 +664,7 @@ public:
 
 Value* UnaryExprAST::codegen()
 {
+  std::cout << "foofer" << std::endl;
   Value* OperandV = Operand->codegen();
   if (!OperandV)
     return nullptr;
@@ -741,7 +758,7 @@ static std::unique_ptr<ExprAST> ParseNumberExpr()
   auto Result = std::make_unique<NumberExprAST>(NumVal);
   tokenizer->getNextToken();  // consume the number
 
-    return std::move(Result);
+  return std::move(Result);
 }
 
 /// parenexpr ::= '(' expression ')'
@@ -765,7 +782,6 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr()
 {
   std::string IdName = IdentifierStr;
 
-  std::cout << "this is the identifier name" << IdName << std::endl;
   tokenizer->getNextToken();  // eat identifier.
                               // Simple variable ref.
   if (CurTok != '(') {
@@ -1270,13 +1286,13 @@ static std::unique_ptr<FunctionAST> ParseDefinition()
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
 {
+  tokenizer->getNextToken();
   std::string IdName = IdentifierStr;
-  auto funciton = FunctionProtos.find(IdName);
-  std::cout << "this is the funciton" << IdName << std::endl;
   auto FI = FunctionProtos.find(IdName);
-  if (FI != FunctionProtos.end()) {
-    std::cout << "we found a funciton" << std::endl;
-  }
+
+  std::string Name = "__anon_expr";
+  std::map<std::string, std::string> Args = FI->second->getArgs();
+  std::string ReturnType = FI->second->getReturnType();
 
   if (auto E = ParseExpression()) {
     printf("parsing top level expression \n");
@@ -1286,9 +1302,8 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
     std::string str;
     llvm::raw_string_ostream rso(str);
     V->print(rso);
-
-    auto Proto = nullptr;
-    return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+    auto proto = std::make_unique<PrototypeAST>(Name, Args, ReturnType);
+    return std::make_unique<FunctionAST>(std::move(proto), std::move(E));
   }
   return nullptr;
 }
