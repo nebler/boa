@@ -380,15 +380,14 @@ Value* IfExprAST::codegen()
 Function* getFunction(std::string Name)
 {
   // If not, check whether we can codegen the declaration from some existing
+  // First, see if the function has already been added to the current module.
+  if (auto* F = TheModule->getFunction(Name)) {
+    return F;
+  }
   // prototype.
   auto FI = FunctionProtos.find(Name);
   if (FI != FunctionProtos.end()) {
     return FI->second->codegen();
-  }
-
-  // First, see if the function has already been added to the current module.
-  if (auto* F = TheModule->getFunction(Name)) {
-    return F;
   }
 
   if (auto* F = TheModule->getFunction(Name + "_ctor")) {
@@ -540,7 +539,6 @@ Function* PrototypeAST::codegen()
     std::advance(it, Idx++);
     Arg.setName(it->first);
   }
-  std::cout << "wooof" << std::endl;
   return F;
 }
 
@@ -1461,7 +1459,7 @@ int main(int argc, char* argv[])
   // is it similar to rust type?
   // Run the main "interpreter loop" now.
   MainLoop();
-
+  std::cout << "end of transimisson" << std::endl;
   // Print out all of the generated code.
   TheModule->print(errs(), nullptr);
 
