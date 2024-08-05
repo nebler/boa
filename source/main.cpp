@@ -1127,9 +1127,6 @@ StructType* StructAST::codegen()
   }
   structType->setBody(memberTypes);
   DefinedTypes[this->getName()] = structType;
-  structType->print(llvm::outs());
-  // Create a constructor for the structs
-  cout << "foofer2" << endl;
   llvm::FunctionType* FuncType =
       llvm::FunctionType::get(structType, {memberTypes}, false);
 
@@ -1262,7 +1259,6 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
   string ReturnType = IdentifierStr;
   auto constructorPrototytpe =
       PrototypeAST(FnName, Args, ReturnType, Kind != 0, BinaryPrecedence);
-  constructorPrototytpe.codegen()->print(llvm::outs());
   tokenizer->getNextToken();  // eat the {
 
   return std::make_unique<PrototypeAST>(constructorPrototytpe);
