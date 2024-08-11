@@ -1,6 +1,7 @@
 # boa-programming-language
 
 This is the boa-programming-language project.
+Currently on hold as I am trying to figure out which type of language I wanna build
 
 # Building and installing
 

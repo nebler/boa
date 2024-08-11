@@ -7,6 +7,9 @@ struct foo2 {
 }
 
 struct foo3 {
+
+
+    
     test int
 }
 
@@ -16,7 +19,7 @@ struct foo4 {
 
 
 struct foo5 {
-    test int
+    test inteh
 }
 
 struct foo6 {
